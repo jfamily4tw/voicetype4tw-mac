@@ -1,6 +1,6 @@
 # release_win.ps1 - VoiceType4TW Clean Release Packager
-$ReleaseFolder = "VoiceType4TW_Win_Stable_V90"
-$ZipFile = "VoiceType4TW_Win_Stable_V90.zip"
+$ReleaseFolder = "VoiceType4TW_Win_Stable_V92"
+$ZipFile = "VoiceType4TW_Win_Stable_V92.zip"
 
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "   VoiceType4TW Clean Release Packager (Windows)" -ForegroundColor Cyan
@@ -37,7 +37,7 @@ foreach ($folder in $Folders) {
 $Files = @(
     "main.py", "paths.py", "config.py", "requirements-win.txt", 
     "setup_win.bat", "run_voicetype.bat", "README.md", "VERSION_TAG.txt",
-    "create_shortcut.ps1"
+    "create_shortcut.ps1", "安裝下載教學.MD"
 )
 
 foreach ($file in $Files) {

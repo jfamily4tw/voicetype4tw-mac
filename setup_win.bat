@@ -49,12 +49,23 @@ pause
 exit /b
 
 :CHECK_DONE
+rem 1.5 Run environment diagnostics
+echo [INFO] Running environment diagnostics...
+%PY_CMD% "%~dp0tools\doctor.py"
+if errorlevel 1 goto DOCTOR_FAIL
+
 rem 2. Create Virtual Environment (venv)
 if exist "%~dp0venv\Scripts\python.exe" goto INSTALL_REQ
 echo [INFO] Creating virtual environment (venv)...
 %PY_CMD% -m venv venv
 if errorlevel 1 goto VENV_FAIL
 goto INSTALL_REQ
+
+:DOCTOR_FAIL
+echo [ERROR] Environment diagnostics failed.
+echo [ACTION] Please check diagnostic_report.txt for details.
+pause
+exit /b
 
 :VENV_FAIL
 echo [ERROR] Failed to create virtual environment.

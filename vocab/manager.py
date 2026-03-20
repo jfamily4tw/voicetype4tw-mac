@@ -166,3 +166,68 @@ def build_vocab_prompt() -> str:
         return "以下是繁體中文的語音內容："
     words_str = "、".join(all_words[:50])
     return f"以下是繁體中文的語音內容，常用詞彙包含：{words_str}。"
+
+
+def _edit_distance_1(a: str, b: str) -> bool:
+    """快速判斷兩字串 edit distance 是否 <= 1（支援替換、插入、刪除）。"""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        diff = sum(1 for x, y in zip(a, b) if x != y)
+        return diff == 1
+    # 長度差 1：檢查插入/刪除
+    shorter, longer = (a, b) if la < lb else (b, a)
+    i = j = diff = 0
+    while i < len(shorter) and j < len(longer):
+        if shorter[i] != longer[j]:
+            diff += 1
+            if diff > 1:
+                return False
+            j += 1
+        else:
+            i += 1
+            j += 1
+    return True
+
+
+def apply_vocab_correction(text: str) -> str:
+    """
+    STT 後修正同音異字錯誤：對自訂詞彙中 >=3 字的詞，
+    在輸出文字中掃描 edit-distance <= 1 的相似子串，強制替換為正確版本。
+    例：私人詞庫有「嘴炮輸入法」，STT 輸出「嘴砲輸入法」→ 自動修正。
+    """
+    if not text:
+        return text
+    custom = load_custom_vocab()
+    # 只處理 3 字以上的詞，避免過度替換短詞
+    targets = sorted([w for w in custom if len(w) >= 3], key=len, reverse=True)
+    for vocab_word in targets:
+        wlen = len(vocab_word)
+        i = 0
+        result = []
+        while i <= len(text) - wlen:
+            substr = text[i:i + wlen]
+            if substr == vocab_word:
+                result.append(vocab_word)
+                i += wlen
+            elif _edit_distance_1(substr, vocab_word):
+                result.append(vocab_word)
+                i += wlen
+                print(f"[vocab] 修正: 「{substr}」→「{vocab_word}」")
+            else:
+                result.append(text[i])
+                i += 1
+        result.append(text[i:])
+        text = "".join(result)
+    return text
+
+
+def remove_learned_word(word: str):
+    """從 AI 學習清單直接刪除，不升格為自訂詞彙。"""
+    memory = load_auto_memory()
+    if word in memory:
+        del memory[word]
+        _save_auto_memory(memory)

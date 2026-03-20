@@ -185,9 +185,8 @@ class VoiceTypeMenuBar:
             elif hasattr(sender, "text"):
                 raw_val = sender.text
             # 3. String fallback
-            elif hasattr(sender, "title"): # rumps fallback
-                val = sender.title
-                raw_val = val() if callable(val) else val
+            elif isinstance(sender, str) and False:  # legacy fallback (unused)
+                raw_val = sender
             elif isinstance(sender, str):
                 raw_val = sender
         except Exception:

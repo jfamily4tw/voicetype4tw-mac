@@ -1,5 +1,12 @@
 import os
 import sys
+
+# Ensure app directory is on sys.path — required for embedded Python (.runtime)
+# which does not automatically add the script's directory.
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+if _app_dir not in sys.path:
+    sys.path.insert(0, _app_dir)
+
 import multiprocessing
 import platform
 import time

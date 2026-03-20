@@ -118,9 +118,6 @@ class VoiceTypeApp(QObject):
         self.recorder.on_stop = self._on_audio_complete
         self.floating_btn.on_click = self._on_toggle_test
         
-        if platform.system() == "Darwin":
-            ensure_all_permissions()
-            
         # v2.8.27_V57: Force initial UI refresh to link menus to button/tray
         self.menu_bar.refresh_ui()
 
@@ -135,14 +132,8 @@ class VoiceTypeApp(QObject):
             from utils.branding import apply_branding
             apply_branding(app_inst)
             
-        # v2.8.27_V68: THE GRAND UNIFICATION (Synchronous Load on Windows)
-        # Windows GUI (PyQt/QSystemTrayIcon) message loops fatally clash with 
-        # ctranslate2 initialization if done in a separate threading.Thread.
-        # We MUST load STT synchronously on the main thread BEFORE starting the GUI loop.
-        if platform.system() == "Windows":
-            self._sync_preload_models()
-        else:
-            threading.Thread(target=self._async_preload_models, daemon=True).start()
+        # v2.8.27_V68: Synchronous load on Windows to prevent ctranslate2/PyQt thread conflict.
+        self._sync_preload_models()
             
         self.hotkey_listener.start()
         if self.config.get("floating_button_enabled", True):
@@ -169,22 +160,6 @@ class VoiceTypeApp(QObject):
             log.info("[main] All models ready.")
         except Exception as e:
             log.error(f"[main] Sync preload failed: {e}", exc_info=True)
-
-    def _async_preload_models(self):
-        """Asynchronous load for Mac (Non-blocking)."""
-        try:
-            log.info("[main] Starting async model preload...")
-            from llm import get_llm
-            from stt import get_stt
-            self.llm = get_llm(self.config)
-            log.info("[main] LLM engine loaded.")
-            self.stt = get_stt(self.config)
-            log.info("[main] STT engine loaded. Warming up...")
-            self.stt.warmup()
-            self._models_ready = True
-            log.info("[main] All models ready.")
-        except Exception as e:
-            log.error(f"[main] Async preload failed: {e}", exc_info=True)
 
     def _handle_ui_signal(self, data):
         t = data.get("type")
@@ -251,10 +226,17 @@ class VoiceTypeApp(QObject):
             stt_start_time = time.time()
             text = self.stt.transcribe(audio_data, language=lang)
             stt_duration = time.time() - stt_start_time
-            
+
             if not text or len(text.strip()) < 1:
                 self.ui_signal.emit({"type": "hide", "value": None})
                 return
+
+            # --- 0.5. 私人詞庫修正（無論是否啟用 LLM 都執行）---
+            try:
+                from vocab.manager import apply_vocab_correction
+                text = apply_vocab_correction(text)
+            except Exception as e:
+                log.error(f"[process] Vocab correction error: {e}")
                 
             # V62: LocalWhisperSTT 不再返回「系統初始化中」，此守衛保留為安全網
             if "系統初始化中" in text or "初始化" in text:
@@ -359,6 +341,13 @@ class VoiceTypeApp(QObject):
                 record_session(stt_duration, len(final_text))
             except Exception as e:
                 log.error(f"[stats] Failed to record: {e}")
+
+            # v2.9.6: 記憶系統：記錄本次對話
+            try:
+                from memory.manager import add_entry
+                add_entry(text, final_text if is_llm_used else "")
+            except Exception as e:
+                log.error(f"[memory] Failed to add entry: {e}")
         except Exception as e:
             log.error(f"[process] Error: {e}")
             self.ui_signal.emit({"type": "hide", "value": None})
@@ -368,13 +357,42 @@ class VoiceTypeApp(QObject):
         base_prompt = DEFAULT_ASSISTANT_PROMPT if is_assistant else DEFAULT_LLM_PROMPT
         scenario_name = self.config.get("active_scenario", "default")
         scenario_path = SOUL_SCENARIO_DIR / f"{scenario_name}.md"
+        parts = [base_prompt]
         if scenario_path.exists():
             try:
                 with open(scenario_path, "r", encoding="utf-8") as f:
                     scenario_content = f.read()
-                return f"{base_prompt}\n\n當前靈魂情境匯入:\n{scenario_content}"
+                parts.append(f"當前靈魂情境匯入:\n{scenario_content}")
             except: pass
-        return base_prompt
+
+        # 私人詞庫強制修正提示
+        try:
+            from vocab.manager import load_custom_vocab
+            custom = load_custom_vocab()
+            if custom:
+                vocab_str = "、".join(list(custom)[:40])
+                parts.append(
+                    f"【私人詞庫強制修正】\n"
+                    f"以下詞彙為使用者定義的正確用字，請優先使用這些詞彙輸出，不得改用同音異字：\n"
+                    f"{vocab_str}"
+                )
+        except Exception:
+            pass
+
+        # 長期記憶注入
+        if self.config.get("memory_enabled", False) and not is_assistant:
+            try:
+                from memory.manager import get_context_for_llm
+                mem_ctx = get_context_for_llm()
+                if mem_ctx:
+                    parts.append(
+                        f"【使用者記憶背景】\n{mem_ctx}\n"
+                        f"（以上為歷史語境，僅供參考用詞和風格，勿直接複製輸出。）"
+                    )
+            except Exception:
+                pass
+
+        return "\n\n".join(parts)
 
     def quit(self):
         try:

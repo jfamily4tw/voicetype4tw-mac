@@ -21,7 +21,7 @@ from config import load_config, save_config
 from paths import SOUL_BASE_PATH, SOUL_SCENARIO_DIR, SOUL_FORMAT_DIR, SOUL_TEMPLATE_DIR, BUILD_ID
 
 log = logging.getLogger("voicetype.ui")
-STT_ENGINES = ["local_whisper", "groq", "gemini", "openrouter"] if platform.system() == "Windows" else ["local_whisper", "mlx_whisper", "groq", "gemini", "openrouter"]
+STT_ENGINES = ["local_whisper", "groq", "gemini", "openrouter"]
 LLM_ENGINES = ["ollama", "openai", "claude", "openrouter", "gemini", "deepseek", "qwen"]
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large"]
 TRIGGER_MODES = ["push_to_talk", "toggle"]
@@ -837,24 +837,6 @@ class SettingsWindow(QMainWindow):
             self.light_input.hide()
             self.light_mic = PermissionLight("麥克風", "")
             self.light_mic.hide()
-        else:
-            # macOS: 原始權限卡片
-            perm_card = GlassCard()
-            p_layout = QVBoxLayout(perm_card)
-            p_layout.setContentsMargins(15, 15, 15, 15)
-            lbl_p = QLabel("🛡️ 權限驗證 (macOS)")
-            lbl_p.setStyleSheet("font-weight: bold; color: #aaa; margin-bottom: 5px;")
-            p_layout.addWidget(lbl_p)
-            
-            self.light_acc = PermissionLight("輔助功能 (Access)", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-            p_layout.addWidget(self.light_acc)
-            
-            self.light_input = PermissionLight("輸入監聽 (Monitor)", "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
-            p_layout.addWidget(self.light_input)
-            
-            self.light_mic = PermissionLight("麥克風 (Mic)", "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-            p_layout.addWidget(self.light_mic)
-            cards_row1.addWidget(perm_card)
 
         # 2. Model Card (New)
         model_card = GlassCard()
@@ -974,7 +956,6 @@ class SettingsWindow(QMainWindow):
         self.stt_engine = self._add_grid_row(layout, "核心引擎", QComboBox())
         engine_meta = {
             "local_whisper": "Local Whisper (RTX顯卡加速, 也支援 CPU/GPU)",
-            "mlx_whisper":   "MLX Whisper (Apple 晶片光速加速版)",
             "groq":          "Groq Whisper (神級雲端超極速)",
             "gemini":        "Gemini (雲端 API)",
             "openrouter":    "OpenRouter (雲端 API)",
@@ -1246,12 +1227,29 @@ class SettingsWindow(QMainWindow):
         self.btn_promote = QPushButton("升格自訂")
         self.btn_promote.clicked.connect(self._promote_vocab)
         lh.addWidget(self.btn_promote)
+        self.btn_delete_learned = QPushButton("刪除")
+        self.btn_delete_learned.setObjectName("danger")
+        self.btn_delete_learned.setFixedHeight(32)
+        self.btn_delete_learned.clicked.connect(self._delete_learned_word)
+        lh.addWidget(self.btn_delete_learned)
         rl.addLayout(lh)
 
         rl.addWidget(QLabel("🧠 長期記憶"))
         self.mem_tree = QTreeWidget()
         self.mem_tree.setHeaderLabels(["時間", "快照"])
         rl.addWidget(self.mem_tree)
+
+        mem_ctrl_row = QHBoxLayout()
+        self.memory_inject_cb = QCheckBox("注入 LLM 記憶")
+        self.memory_inject_cb.setChecked(False)
+        mem_ctrl_row.addWidget(self.memory_inject_cb)
+        mem_ctrl_row.addStretch()
+        self.btn_purge_memory = QPushButton("壓縮本週記憶")
+        self.btn_purge_memory.setObjectName("danger")
+        self.btn_purge_memory.setFixedHeight(32)
+        self.btn_purge_memory.clicked.connect(self._purge_memory)
+        mem_ctrl_row.addWidget(self.btn_purge_memory)
+        rl.addLayout(mem_ctrl_row)
 
         splitter.addWidget(v_box)
         splitter.addWidget(right_box)
@@ -1561,6 +1559,7 @@ class SettingsWindow(QMainWindow):
         self.output_prefix.setChecked(self.config.get("output_prefix", False))
         self.separate_keystrike_log.setChecked(self.config.get("separate_keystrike_log", False))
         self.showcase_mode.setChecked(self.config.get("showcase_mode", False))
+        self.memory_inject_cb.setChecked(self.config.get("memory_enabled", False))
 
         # Refreshes
         self._refresh_vocab()
@@ -1615,18 +1614,7 @@ class SettingsWindow(QMainWindow):
             log.info("[PERM] Windows: All permissions auto-granted.")
             return
 
-        from utils.permissions import check_accessibility, check_microphone
-        
-        # 1. Accessibility (also covers Input Monitoring for pynput)
-        trusted = check_accessibility()
-        self.light_acc.set_status(trusted)
-        self.light_input.set_status(trusted)
-        log.info(f"[PERM] Accessibility: {trusted}")
-
-        # 2. Microphone
-        mic_ok = check_microphone()
-        self.light_mic.set_status(mic_ok)
-        log.info(f"[PERM] Microphone Authorized: {mic_ok}")
+        log.info("[PERM] Windows: All permissions auto-granted.")
 
     def _check_local_models(self):
         """檢查 Faster-Whisper 模型是否已下載到本機快取"""
@@ -1640,14 +1628,9 @@ class SettingsWindow(QMainWindow):
             if not cache_path.exists():
                 return False
             
-            # support both faster-whisper and mlx-community naming structures
             # faster-whisper: models--Systran--faster-whisper-<size>
-            # mlx-community: models--mlx-community--whisper-<size>-mlx (where large is large-v3-mlx)
-            
-            mlx_size = "large-v3" if size == "large" else size
             prefixes = [
                 f"models--Systran--faster-whisper-{size}",
-                f"models--mlx-community--whisper-{mlx_size}-mlx"
             ]
             
             for p in cache_path.iterdir():
@@ -1714,16 +1697,51 @@ class SettingsWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "錯誤", str(e))
 
+    def _delete_learned_word(self):
+        item = self.learned_list.currentItem()
+        if not item: return
+        word = item.text().split(" (")[0]
+        try:
+            from vocab.manager import remove_learned_word
+            remove_learned_word(word)
+            self._refresh_learned_vocab()
+        except Exception as e:
+            QMessageBox.critical(self, "錯誤", str(e))
+
     def _refresh_memory(self):
         self.mem_tree.clear()
         try:
             from memory.manager import load_memory
             memory = load_memory()
+            summary = memory.get("summary", "")
+            if summary:
+                self.mem_tree.addTopLevelItem(QTreeWidgetItem(["[摘要]", summary[:60] + "..."]))
             for entry in reversed(memory.get("entries", [])):
                 ts = entry.get("ts", "")[:16]
                 text = (entry.get("llm") or entry.get("stt", ""))[:40]
                 self.mem_tree.addTopLevelItem(QTreeWidgetItem([ts, text + "..."]))
         except: pass
+
+    def _purge_memory(self):
+        from memory.manager import load_memory
+        count = len(load_memory().get("entries", []))
+        if count == 0:
+            QMessageBox.information(self, "記憶壓縮", "目前沒有可壓縮的記憶條目。")
+            return
+        reply = QMessageBox.question(
+            self, "確認壓縮記憶",
+            f"將 {count} 筆原始記錄壓縮為摘要，原始資料將歸檔保留。確定？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            from memory.manager import purge_and_summarize
+            purged = purge_and_summarize()
+            self._refresh_memory()
+            QMessageBox.information(self, "壓縮完成", f"已壓縮 {purged} 筆記錄，摘要已更新。")
+        except Exception as e:
+            QMessageBox.critical(self, "錯誤", str(e))
 
     def _refresh_stats(self):
         self.stats_tree.clear()
@@ -1802,6 +1820,7 @@ class SettingsWindow(QMainWindow):
         self.config["separate_keystrike_log"] = self.separate_keystrike_log.isChecked()
         self.config["show_floating_button"] = self.show_floating_button.isChecked()
         self.config["showcase_mode"] = self.showcase_mode.isChecked()
+        self.config["memory_enabled"] = self.memory_inject_cb.isChecked()
 
         try:
             SOUL_BASE_PATH.write_text(self.soul_prompt.toPlainText().strip(), encoding="utf-8")
@@ -1909,8 +1928,8 @@ class SettingsWindow(QMainWindow):
             energy = np.sqrt(np.mean(recording**2))
             
             if energy < 1e-7:
-                QMessageBox.critical(self, "測試失敗", 
-                    "偵測到【完全靜音】(Silence)。\n\n這通常代表 macOS TCC 權限異常，請嘗試在終端機執行：\ntccutil reset Microphone\n然後重啟 App。")
+                QMessageBox.critical(self, "測試失敗",
+                    "偵測到【完全靜音】(Silence)。\n\n請至 Windows 設定 → 隱私權 → 麥克風，確認已授權本程式存取麥克風。")
             elif energy < 1e-3:
                 QMessageBox.warning(self, "測試警告", 
                     f"音訊能源過低 ({energy:.6f})。\n\n請檢查系統輸入音量設定。")

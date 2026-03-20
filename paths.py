@@ -1,51 +1,13 @@
 import os
+import sys
 from pathlib import Path
 
-# Get user home directory and create standard app support directory
+IS_WINDOWS = sys.platform == "win32"
+
+# Windows: %APPDATA%/VoiceType4TW
 HOME = Path.home()
-import platform
-IS_WINDOWS = platform.system() == "Windows"
+APP_DATA_DIR = Path(os.environ.get("APPDATA", str(HOME / "AppData" / "Roaming"))) / "VoiceType4TW"
 
-if IS_WINDOWS:
-    # Windows: %APPDATA%/VoiceType4TW
-    APP_DATA_DIR = Path(os.environ.get("APPDATA", str(HOME / "AppData" / "Roaming"))) / "VoiceType4TW"
-else:
-    # macOS: ~/Library/Application Support/VoiceType4TW
-    APP_DATA_DIR = HOME / "Library" / "Application Support" / "VoiceType4TW"
-
-# v2.9.1: Legacy Migration Logic
-def migrate_legacy_data():
-    legacy_paths = [
-        HOME / "Library" / "Application Support" / "嘴炮輸入法",
-        HOME / "Library" / "Application Support" / "嘴砲輸入法"
-    ]
-    for lp in legacy_paths:
-        if lp.exists() and lp.is_dir():
-            print(f"[paths] Migrating legacy data from {lp} to {APP_DATA_DIR}")
-            for item in lp.iterdir():
-                target = APP_DATA_DIR / item.name
-                try:
-                    import shutil
-                    if item.is_dir():
-                        if not target.exists():
-                            shutil.copytree(item, target)
-                        else:
-                            # Merge existing directories instead of skipping
-                            for sub_item in item.iterdir():
-                                sub_target = target / sub_item.name
-                                if not sub_target.exists():
-                                    if sub_item.is_dir():
-                                        shutil.copytree(sub_item, sub_target)
-                                    else:
-                                        shutil.copy2(sub_item, sub_target)
-                    else:
-                        if not target.exists():
-                            shutil.copy2(item, target)
-                    print(f"[paths] Migrated {item.name}")
-                except Exception as e:
-                    print(f"[paths] Migration error for {item.name}: {e}")
-
-# Pre-define APP_DATA_DIR logic only, do not perform IO at top level.
 # v2.8.27_V39: Side-effects moved to initialize_paths()
 
 # 📄 基於指標的同步系統 (Synchronized Path Redirection)
@@ -97,8 +59,8 @@ STATS_DIR = SYNC_BASE_DIR / "stats"
 AI_PERMANENT_MEMORY_PATH = SYNC_BASE_DIR / "ai_permanent_memory.md"
 
 APP_CONFIG_DIR = APP_DATA_DIR
-VERSION_NAME = "V2.8.27 Windows Stable (V92-DIAGNOSTIC-VENV)"
-BUILD_ID = "BUILD-2026-03-16-V92"
+VERSION_NAME = "V2.9.6 Windows (BUILD-2960-STABLE)"
+BUILD_ID = "BUILD-2960-STABLE"
 KEYSTRIKE_LOG_PATH = APP_DATA_DIR / "keystrike.log"
 
 # 舊版路徑 (用於遷移)
@@ -115,8 +77,7 @@ def get_data_dir(subfolder: str) -> Path:
 # Initial data migration
 def _initialize_data():
     try:
-        res_path = os.environ.get("RESOURCEPATH")
-        base_dir = Path(res_path) if res_path else Path(__file__).parent
+        base_dir = Path(__file__).parent
         
         # 建立目錄
         SOUL_DIR.mkdir(parents=True, exist_ok=True)
@@ -161,20 +122,18 @@ def _initialize_data():
 # ONLY call this from main.py if is_main_process is True.
 def initialize_paths():
     try:
-        # Perform directory creation and migration here ONLY
         APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        migrate_legacy_data()
-        
+
         # Ensure critical logs exist
         (APP_DATA_DIR / "debug.log").touch(exist_ok=True)
         (APP_DATA_DIR / "keystrike.log").touch(exist_ok=True)
-        
-        # New base sync dir check
+
+        # Ensure sync dir exists
         try:
             get_sync_base_dir().mkdir(parents=True, exist_ok=True)
         except:
             pass
-            
+
         _initialize_data()
     except Exception as e:
         print(f"[paths] Skip initialization: {e}")

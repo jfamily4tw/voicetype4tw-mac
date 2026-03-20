@@ -44,12 +44,19 @@ def check_path_validity(path_str):
     return True, "路徑格式安全。"
 
 def check_python_integrity():
+    # Embedded Python does not have venv — check pip instead
     try:
-        import venv
         import pip
         return True, f"Python 組件完整 (Python {platform.python_version()})。"
-    except ImportError as e:
-        return False, f"Python 組件缺失: {e}。請重新安裝 Python 並勾選 pip 等選項。"
+    except ImportError:
+        pass
+    # pip might not be importable but still exist as a module path
+    import subprocess
+    result = subprocess.run([sys.executable, "-m", "pip", "--version"],
+                            capture_output=True, text=True)
+    if result.returncode == 0:
+        return True, f"Python 組件完整 (Python {platform.python_version()})。"
+    return False, "pip 不可用。請確認 Python 安裝完整，或讓 setup_win.bat 自動修復。"
 
 def check_network():
     print("[INFO] 正在測試與 HuggingFace 的連線...", end="", flush=True)

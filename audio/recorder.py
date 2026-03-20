@@ -17,10 +17,12 @@ class AudioRecorder:
         samplerate: int = 16000,
         channels: int = 1,
         level_callback: Optional[Callable[[float], None]] = None,
+        device: Optional[int] = None,
     ):
         self.samplerate = samplerate
         self.channels = channels
         self.level_callback = level_callback
+        self.device = device  # None = 系統預設麥克風
         self._recording = False
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
@@ -43,6 +45,7 @@ class AudioRecorder:
             samplerate=self.samplerate,
             channels=self.channels,
             dtype="int16",
+            device=self.device,
         )
         self._stream.start()
         
@@ -71,7 +74,7 @@ class AudioRecorder:
                 # 計算音量 RMS (0.0 ~ 1.0) 回傳給 UI
                 if self.level_callback:
                     rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2))) / 32768.0
-                    self.level_callback(min(rms * 10, 1.0))
+                    self.level_callback(min(rms * 50, 1.0))
 
             except Exception as e:
                 # 當串流被外界中止或關閉，將引發例外中斷讀取

@@ -1220,14 +1220,17 @@ class SettingsWindow(QMainWindow):
         return page
 
     def _create_general_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        
+        page = QScrollArea()
+        page.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+
         layout.addWidget(self._page_section_header("⌨️ 設定錄音按鍵"))
         
         hotkey_grid = QFrame()
         grid_layout = QVBoxLayout(hotkey_grid)
-        
+        grid_layout.setSpacing(14)
+
         row_ptt = QHBoxLayout()
         self.btn_ptt = HotkeyRecorderButton(self.config.get("hotkey_ptt", "alt_r"))
         self.btn_ptt.setFixedHeight(32)
@@ -1291,7 +1294,31 @@ class SettingsWindow(QMainWindow):
         grid_layout.addLayout(row_toggle)
         
         layout.addWidget(hotkey_grid)
-        
+
+        layout.addWidget(self._page_section_header("🎤 麥克風選擇"))
+        mic_row = QHBoxLayout()
+        lbl_mic = QLabel("輸入裝置")
+        lbl_mic.setFixedWidth(120)
+        self.mic_device_combo = QComboBox()
+        self.mic_device_combo.setFixedHeight(32)
+        self.mic_device_combo.setFixedWidth(280)
+        self._last_mic_device_names = []
+        self._populate_mic_devices()
+        btn_refresh_mic = QPushButton("🔄")
+        btn_refresh_mic.setFixedWidth(32)
+        btn_refresh_mic.setFixedHeight(32)
+        btn_refresh_mic.setToolTip("重新偵測麥克風裝置")
+        btn_refresh_mic.setStyleSheet("background: transparent; border: none; font-size: 16px; padding: 0px;")
+        btn_refresh_mic.clicked.connect(self._populate_mic_devices)
+        mic_row.addWidget(lbl_mic)
+        mic_row.addWidget(self.mic_device_combo)
+        mic_row.addWidget(btn_refresh_mic)
+        mic_row.addStretch(1)
+        layout.addLayout(mic_row)
+        self._mic_poll_timer = QTimer(self)
+        self._mic_poll_timer.timeout.connect(self._check_mic_devices_changed)
+        self._mic_poll_timer.start(2000)
+
         layout.addWidget(self._page_section_header("⚙️ 偏好設定"))
         self.auto_paste = QCheckBox("結果自動貼上 (Paste automatically)")
         self.auto_paste.setChecked(self.config.get("auto_paste", True))
@@ -1328,32 +1355,43 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self._page_section_header("🛠️ 診斷與修復"))
         
         diag_grid = QGridLayout()
-        diag_grid.setContentsMargins(0, 5, 0, 5)
-        diag_grid.setSpacing(10)
+        diag_grid.setContentsMargins(0, 10, 0, 10)
+        diag_grid.setVerticalSpacing(16)
+        diag_grid.setHorizontalSpacing(12)
 
-        self.btn_mic_test = QPushButton("🎤 麥克風測試與診斷 (Mic Test)")
+        diag_btn_css = "font-size: 12px; padding: 10px 10px;"
+        self.btn_mic_test = QPushButton("🎤 麥克風測試 (Mic Test)")
         self.btn_mic_test.setObjectName("secondary")
+        self.btn_mic_test.setStyleSheet(diag_btn_css)
+        self.btn_mic_test.setMinimumHeight(44)
         self.btn_mic_test.clicked.connect(self._run_mic_test)
         diag_grid.addWidget(self.btn_mic_test, 0, 0)
-        
-        self.btn_run_self_check = QPushButton("🔍 系統自我檢測 (Self-Check)")
+
+        self.btn_run_self_check = QPushButton("🔍 系統檢測 (Self-Check)")
         self.btn_run_self_check.setObjectName("secondary")
+        self.btn_run_self_check.setStyleSheet(diag_btn_css)
+        self.btn_run_self_check.setMinimumHeight(44)
         self.btn_run_self_check.clicked.connect(self._run_self_check)
         diag_grid.addWidget(self.btn_run_self_check, 0, 1)
 
-        self.btn_view_logs = QPushButton("📄 檢視詳細日誌 (View Detail Logs)")
+        self.btn_view_logs = QPushButton("📄 詳細日誌 (Detail Logs)")
         self.btn_view_logs.setObjectName("secondary")
+        self.btn_view_logs.setStyleSheet(diag_btn_css)
+        self.btn_view_logs.setMinimumHeight(44)
         self.btn_view_logs.clicked.connect(self._view_debug_log)
         diag_grid.addWidget(self.btn_view_logs, 1, 0)
 
-        self.btn_view_keystrike = QPushButton("📄 檢視熱鍵紀錄 (View Keys Logs)")
+        self.btn_view_keystrike = QPushButton("📄 熱鍵紀錄 (Keys Logs)")
         self.btn_view_keystrike.setObjectName("secondary")
+        self.btn_view_keystrike.setStyleSheet(diag_btn_css)
+        self.btn_view_keystrike.setMinimumHeight(44)
         self.btn_view_keystrike.clicked.connect(self._view_keystrike_log)
         diag_grid.addWidget(self.btn_view_keystrike, 1, 1)
 
         layout.addLayout(diag_grid)
         
         layout.addStretch()
+        page.setWidget(container)
         return page
     # ── 同步邏輯 (Sync Logic) ────────────────────────────────────
     def _set_sync_directory(self):
@@ -1745,6 +1783,7 @@ class SettingsWindow(QMainWindow):
         self.config["separate_keystrike_log"] = self.separate_keystrike_log.isChecked()
         self.config["show_floating_button"] = self.show_floating_button.isChecked()
         self.config["showcase_mode"] = self.showcase_mode.isChecked()
+        self.config["mic_device"] = self.mic_device_combo.currentData()
 
         try:
             SOUL_BASE_PATH.write_text(self.soul_prompt.toPlainText().strip(), encoding="utf-8")
@@ -1798,6 +1837,41 @@ class SettingsWindow(QMainWindow):
     def run(self):
         self.show()
 
+    def _get_current_mic_names(self):
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            return [dev['name'] for dev in devices if dev['max_input_channels'] > 0]
+        except Exception:
+            return []
+
+    def _check_mic_devices_changed(self):
+        current = self._get_current_mic_names()
+        if current != self._last_mic_device_names:
+            self._populate_mic_devices()
+
+    def _populate_mic_devices(self):
+        prev_selection = self.mic_device_combo.currentData()
+        self.mic_device_combo.clear()
+        self.mic_device_combo.addItem("系統預設 (System Default)", None)
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            names = []
+            for i, dev in enumerate(devices):
+                if dev['max_input_channels'] > 0:
+                    names.append(dev['name'])
+                    self.mic_device_combo.addItem(f"{dev['name']}  (#{i})", i)
+            self._last_mic_device_names = names
+        except Exception as e:
+            log.error(f"[mic] Failed to enumerate devices: {e}")
+            self._last_mic_device_names = []
+        restore = prev_selection if prev_selection is not None else self.config.get("mic_device")
+        if restore is not None:
+            idx = self.mic_device_combo.findData(restore)
+            if idx >= 0:
+                self.mic_device_combo.setCurrentIndex(idx)
+
     def _run_mic_test(self):
         from PyQt6.QtWidgets import QMessageBox, QProgressDialog
         import sounddevice as sd
@@ -1826,7 +1900,8 @@ class SettingsWindow(QMainWindow):
         duration = 3.0
         
         try:
-            recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
+            mic_dev = self.mic_device_combo.currentData()
+            recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32', device=mic_dev)
             
             for i in range(3):
                 progress.setValue(i)

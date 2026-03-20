@@ -42,14 +42,17 @@ DEFAULT_CONFIG = {
     # 其他
     "auto_paste": True,
     "magic_trigger": "嘿 VoiceType",
+    # 麥克風
+    "mic_device": None,  # None = 系統預設麥克風
 }
 # 🗝️ 本地設定白名單 (不進行雲端同步的項目)
 LOCAL_KEYS = {
-    "hotkey_ptt", "hotkey_toggle", "hotkey_llm", "hotkey", 
+    "hotkey_ptt", "hotkey_toggle", "hotkey_llm", "hotkey",
     "trigger_mode", "show_floating_button", "completion_sound",
-    "debug_mode", "is_demo", "output_prefix", 
+    "debug_mode", "is_demo", "output_prefix",
     "separate_keystrike_log", "showcase_mode",
-    "stt_engine", "whisper_model"
+    "stt_engine", "whisper_model",
+    "mic_device",
 }
 
 from paths import GLOBAL_CONFIG_PATH, LOCAL_CONFIG_PATH, APP_DATA_DIR

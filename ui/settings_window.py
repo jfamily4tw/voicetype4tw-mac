@@ -1127,12 +1127,6 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self.download_card)
         self.download_card.setVisible(not self._is_model_present(self.config.get("whisper_model", "medium")))
 
-        # 假進度 Timer（warmup 期間用）
-        self._warmup_fake_pct = 0
-        self._warmup_timer = QTimer(self)
-        self._warmup_timer.setInterval(300)  # 每 300ms 推進一次
-        self._warmup_timer.timeout.connect(self._warmup_tick)
-
         # ── 麥克風資訊卡（warmup 完成後顯示）─────────────────
         self.mic_info_card = GlassCard()
         mic_il = QHBoxLayout(self.mic_info_card)
@@ -2463,12 +2457,10 @@ class SettingsWindow(QMainWindow):
 
     def update_download_progress(self, status: str, pct: int = -1, done: bool = False):
         """由 main.py 呼叫，更新模型下載 / 預熱進度卡片。
-        pct = 0-100 實際進度, -1 = 不確定（假進度條動畫）, done=True 完成。
+        pct = 0-100 實際進度, -1 = 不確定（indeterminate）, done=True 完成。
         """
         try:
             if done:
-                self._warmup_timer.stop()
-                # 快速跑完進度條至 100%，再隱藏
                 self.download_progress.setRange(0, 100)
                 self.download_progress.setValue(100)
                 self.lbl_download_pct.setText("100%")
@@ -2479,26 +2471,13 @@ class SettingsWindow(QMainWindow):
             self.lbl_download_status.setText(status)
 
             if pct < 0:
-                # 不確定進度 → 啟動假進度條 Timer（慢速爬升至 90%）
-                self.download_progress.setRange(0, 100)
-                if not self._warmup_timer.isActive():
-                    self._warmup_fake_pct = 0
-                    self._warmup_timer.start()
-                self.lbl_download_pct.setText(f"{self._warmup_fake_pct}%")
+                # 不確定進度 → Qt 原生 indeterminate 動畫
+                self.download_progress.setRange(0, 0)
+                self.lbl_download_pct.setText("⏳")
             else:
-                self._warmup_timer.stop()
+                self.download_progress.setRange(0, 100)
                 self.download_progress.setValue(pct)
                 self.lbl_download_pct.setText(f"{pct}%")
-        except Exception:
-            pass
-
-    def _warmup_tick(self):
-        """假進度條每次 tick 推進，最高到 90% 等待真正完成訊號。"""
-        try:
-            step = 3 if self._warmup_fake_pct < 30 else (2 if self._warmup_fake_pct < 60 else 1)
-            self._warmup_fake_pct = min(self._warmup_fake_pct + step, 90)
-            self.download_progress.setValue(self._warmup_fake_pct)
-            self.lbl_download_pct.setText(f"{self._warmup_fake_pct}%")
         except Exception:
             pass
 

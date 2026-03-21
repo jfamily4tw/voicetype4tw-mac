@@ -99,7 +99,10 @@ class VoiceTypeApp(QObject):
         self.recorder = AudioRecorder(
             samplerate=16000,
             channels=1,
-            level_callback=self.indicator.set_level
+            level_callback=self.indicator.set_level,
+            device=self.config.get("mic_device"),
+            gain=self.config.get("mic_gain", 50),
+            gain_auto=self.config.get("mic_gain_auto", True),
         )
         
         self.injector = TextInjector()
@@ -784,6 +787,11 @@ class VoiceTypeApp(QObject):
                         config=self.config
                     )
                     self.hotkey_listener.start()
+            # Refresh mic device / gain if changed
+            self.recorder.device = self.config.get("mic_device")
+            self.recorder.gain = self.config.get("mic_gain", 50)
+            self.recorder.gain_auto = self.config.get("mic_gain_auto", True)
+
             # Refresh tray menu if needed
             if self.menu_bar:
                 self.menu_bar.config = self.config

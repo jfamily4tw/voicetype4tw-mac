@@ -8,9 +8,9 @@ import platform
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QStackedWidget, QLabel, QLineEdit, QComboBox, QCheckBox, QPushButton, 
+    QStackedWidget, QLabel, QLineEdit, QComboBox, QCheckBox, QPushButton,
     QTextEdit, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QMessageBox, QFileDialog, QScrollArea, QFrame, QSplitter, QSizePolicy
+    QMessageBox, QFileDialog, QScrollArea, QFrame, QSplitter, QSizePolicy, QSlider
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRect, QUrl, QTimer
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QLinearGradient, QBrush, QPixmap, QDesktopServices
@@ -43,7 +43,7 @@ _MS_CODEPOINTS = {
     "keyboard": "\ue312", "lock_open": "\ue898", "manage_accounts": "\uf02e",
     "menu_book": "\uea19", "mic": "\ue31d", "mic_external_on": "\uef5a",
     "psychology": "\uea4a", "settings": "\ue8b8", "shield": "\ue9e0",
-    "smart_toy": "\uf06c", "terminal": "\ueb8e", "tune": "\ue429",
+    "refresh": "\ue5d5", "smart_toy": "\uf06c", "terminal": "\ueb8e", "tune": "\ue429",
     "visibility": "\ue8f4",
 }
 
@@ -2007,6 +2007,88 @@ class SettingsWindow(QMainWindow):
         self.btn_test_llm.clicked.connect(self.test_llm.emit)
         hl.addLayout(llm_row_w)
 
+        # ─ 分隔線 ─
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"color: {s['bg_input_border']}; background: {s['bg_input_border']}; border: none; max-height: 1px;")
+        hl.addWidget(sep)
+
+        # ─ 麥克風選擇 ─
+        mic_hdr = QHBoxLayout()
+        mic_hdr.setSpacing(6)
+        mic_hdr_icon = ms_icon("mic", 16, s['text_secondary'])
+        mic_hdr_title = QLabel("麥克風選擇")
+        mic_hdr_title.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {s['text_primary']}; background: transparent;")
+        mic_hdr.addWidget(mic_hdr_icon)
+        mic_hdr.addWidget(mic_hdr_title)
+        mic_hdr.addStretch()
+        hl.addLayout(mic_hdr)
+
+        # 裝置選單列
+        mic_dev_row = QHBoxLayout()
+        mic_dev_row.setSpacing(8)
+        mic_dev_lbl = QLabel("輸入裝置")
+        mic_dev_lbl.setFixedWidth(130)
+        mic_dev_lbl.setStyleSheet(f"font-size: 13px; color: {s['text_primary']}; background: transparent;")
+        self.mic_device_combo = QComboBox()
+        self.mic_device_combo.setFixedHeight(36)
+        self._last_mic_device_names = []
+        self._populate_mic_devices()
+        btn_refresh_mic = QPushButton()
+        btn_refresh_mic.setFixedSize(36, 36)
+        btn_refresh_mic.setToolTip("重新偵測麥克風裝置")
+        btn_refresh_mic.setLayout(QHBoxLayout())
+        btn_refresh_mic.layout().setContentsMargins(0, 0, 0, 0)
+        refresh_icon = ms_icon("refresh", 16, s['text_secondary'])
+        btn_refresh_mic.layout().addWidget(refresh_icon)
+        btn_refresh_mic.setStyleSheet(f"""
+            QPushButton {{ background: {s['bg_input']}; border: 1px solid {s['bg_input_border']}; border-radius: 8px; }}
+            QPushButton:hover {{ border-color: {s['text_secondary']}; }}
+        """)
+        btn_refresh_mic.clicked.connect(self._populate_mic_devices)
+        mic_dev_row.addWidget(mic_dev_lbl)
+        mic_dev_row.addWidget(self.mic_device_combo, stretch=1)
+        mic_dev_row.addWidget(btn_refresh_mic)
+        hl.addLayout(mic_dev_row)
+
+        # 自動偵測插拔
+        self._mic_poll_timer = QTimer(self)
+        self._mic_poll_timer.timeout.connect(self._check_mic_devices_changed)
+        self._mic_poll_timer.start(2000)
+
+        # 音量感度列
+        mic_gain_row = QHBoxLayout()
+        mic_gain_row.setSpacing(8)
+        mic_gain_lbl = QLabel("音量感度")
+        mic_gain_lbl.setFixedWidth(130)
+        mic_gain_lbl.setStyleSheet(f"font-size: 13px; color: {s['text_primary']}; background: transparent;")
+        self.mic_gain_slider = QSlider(Qt.Orientation.Horizontal)
+        self.mic_gain_slider.setRange(5, 200)
+        self.mic_gain_slider.setValue(self.config.get("mic_gain", 50))
+        self.mic_gain_slider.setFixedHeight(36)
+        self.mic_gain_val_lbl = QLabel(f"×{self.config.get('mic_gain', 50)}")
+        self.mic_gain_val_lbl.setFixedWidth(38)
+        self.mic_gain_val_lbl.setStyleSheet(f"font-size: 12px; color: {s['text_secondary']}; background: transparent;")
+        self.mic_gain_slider.valueChanged.connect(
+            lambda v: self.mic_gain_val_lbl.setText(f"×{v}")
+        )
+        self.mic_gain_auto_toggle = ToggleSwitch(checked=self.config.get("mic_gain_auto", True))
+        auto_lbl = QLabel("自動")
+        auto_lbl.setStyleSheet(f"font-size: 12px; color: {s['text_secondary']}; background: transparent;")
+
+        def _update_gain_slider_state(checked):
+            self.mic_gain_slider.setEnabled(not checked)
+            self.mic_gain_val_lbl.setEnabled(not checked)
+        self.mic_gain_auto_toggle.toggled.connect(_update_gain_slider_state)
+        _update_gain_slider_state(self.mic_gain_auto_toggle.isChecked())
+
+        mic_gain_row.addWidget(mic_gain_lbl)
+        mic_gain_row.addWidget(self.mic_gain_slider, stretch=1)
+        mic_gain_row.addWidget(self.mic_gain_val_lbl)
+        mic_gain_row.addWidget(auto_lbl)
+        mic_gain_row.addWidget(self.mic_gain_auto_toggle)
+        hl.addLayout(mic_gain_row)
+
         hl.addStretch()
         top_row.addWidget(hotkey_card, stretch=3)
 
@@ -2305,6 +2387,10 @@ class SettingsWindow(QMainWindow):
         self.completion_sound.setChecked(self.config.get("completion_sound", True))
         self.debug_mode.setChecked(self.config.get("debug_mode", False))
         self.memory_inject_toggle.setChecked(self.config.get("memory_enabled", True))
+        # 麥克風設定
+        self._populate_mic_devices()
+        self.mic_gain_slider.setValue(self.config.get("mic_gain", 50))
+        self.mic_gain_auto_toggle.setChecked(self.config.get("mic_gain_auto", True))
         self.debug_demo_mode.setChecked(self.config.get("is_demo", False))
         self.output_prefix.setChecked(self.config.get("output_prefix", False))
         self.showcase_mode.setChecked(self.config.get("showcase_mode", False))
@@ -2623,6 +2709,9 @@ class SettingsWindow(QMainWindow):
         self.config["output_prefix"] = self.output_prefix.isChecked()
         self.config["showcase_mode"] = self.showcase_mode.isChecked()
         self.config["show_floating_button"] = self.show_floating_button.isChecked()
+        self.config["mic_device"] = self.mic_device_combo.currentData()
+        self.config["mic_gain"] = self.mic_gain_slider.value()
+        self.config["mic_gain_auto"] = self.mic_gain_auto_toggle.isChecked()
 
         try:
             SOUL_BASE_PATH.write_text(self.soul_prompt.toPlainText().strip(), encoding="utf-8")
@@ -2676,6 +2765,42 @@ class SettingsWindow(QMainWindow):
     def run(self):
         self.show()
 
+    def _get_current_mic_names(self):
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            return [dev['name'] for dev in devices if dev['max_input_channels'] > 0]
+        except Exception:
+            return []
+
+    def _check_mic_devices_changed(self):
+        current = self._get_current_mic_names()
+        if current != self._last_mic_device_names:
+            self._populate_mic_devices()
+
+    def _populate_mic_devices(self):
+        prev_selection = self.mic_device_combo.currentData()
+        self.mic_device_combo.clear()
+        self.mic_device_combo.addItem("系統預設 (System Default)", None)
+        try:
+            import sounddevice as sd
+            devices = sd.query_devices()
+            names = []
+            for i, dev in enumerate(devices):
+                if dev['max_input_channels'] > 0:
+                    names.append(dev['name'])
+                    self.mic_device_combo.addItem(f"{dev['name']}  (#{i})", i)
+            self._last_mic_device_names = names
+        except Exception as e:
+            log.error(f"[mic] Failed to enumerate devices: {e}")
+            self._last_mic_device_names = []
+        # 還原上次的選擇（或從 config 讀取）
+        restore = prev_selection if prev_selection is not None else self.config.get("mic_device")
+        if restore is not None:
+            idx = self.mic_device_combo.findData(restore)
+            if idx >= 0:
+                self.mic_device_combo.setCurrentIndex(idx)
+
     def _run_mic_test(self):
         from PyQt6.QtWidgets import QMessageBox, QProgressDialog
         import sounddevice as sd
@@ -2703,8 +2828,10 @@ class SettingsWindow(QMainWindow):
         fs = 16000
         duration = 3.0
         
+        mic_dev = self.mic_device_combo.currentData()
+        dev_name = self.mic_device_combo.currentText()
         try:
-            recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
+            recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32', device=mic_dev)
             
             for i in range(3):
                 progress.setValue(i)
@@ -2724,8 +2851,8 @@ class SettingsWindow(QMainWindow):
                 QMessageBox.warning(self, "測試警告", 
                     f"音訊能源過低 ({energy:.6f})。\n\n請檢查系統輸入音量設定。")
             else:
-                QMessageBox.information(self, "測試成功", 
-                    f"成功接收音訊資料！\n能源強度: {energy:.6f}\n您的麥克風運作正常。")
+                QMessageBox.information(self, "測試成功",
+                    f"成功接收音訊資料！\n裝置：{dev_name}\n能源強度: {energy:.6f}\n您的麥克風運作正常。")
                 
         except Exception as e:
             if 'progress' in locals(): progress.close()

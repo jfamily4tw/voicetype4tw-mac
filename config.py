@@ -44,6 +44,10 @@ DEFAULT_CONFIG = {
     "magic_trigger": "嘿 VoiceType",
     # UI
     "ui_skin": "titanium",
+    # 麥克風
+    "mic_device": None,   # None = 系統預設
+    "mic_gain": 50,       # 視覺音量感度倍率 (5~200)
+    "mic_gain_auto": True, # 自動調整感度
 }
 # 🗝️ 本地設定白名單 (不進行雲端同步的項目)
 LOCAL_KEYS = {
@@ -51,7 +55,8 @@ LOCAL_KEYS = {
     "trigger_mode", "show_floating_button", "completion_sound",
     "debug_mode", "is_demo", "output_prefix",
     "separate_keystrike_log", "showcase_mode",
-    "stt_engine", "whisper_model", "ui_skin"
+    "stt_engine", "whisper_model", "ui_skin",
+    "mic_device", "mic_gain", "mic_gain_auto",
 }
 
 from paths import GLOBAL_CONFIG_PATH, LOCAL_CONFIG_PATH, APP_DATA_DIR

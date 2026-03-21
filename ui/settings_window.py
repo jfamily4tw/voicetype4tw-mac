@@ -1127,6 +1127,45 @@ class SettingsWindow(QMainWindow):
         layout.addWidget(self.download_card)
         self.download_card.setVisible(not self._is_model_present(self.config.get("whisper_model", "medium")))
 
+        # 假進度 Timer（warmup 期間用）
+        self._warmup_fake_pct = 0
+        self._warmup_timer = QTimer(self)
+        self._warmup_timer.setInterval(300)  # 每 300ms 推進一次
+        self._warmup_timer.timeout.connect(self._warmup_tick)
+
+        # ── 麥克風資訊卡（warmup 完成後顯示）─────────────────
+        self.mic_info_card = GlassCard()
+        mic_il = QHBoxLayout(self.mic_info_card)
+        mic_il.setContentsMargins(20, 14, 20, 14)
+        mic_il.setSpacing(14)
+
+        mic_icon_box = QFrame()
+        mic_icon_box.setFixedSize(40, 40)
+        mic_icon_box.setStyleSheet(f"background: {s['bg_card']}; border: 1px solid {s['card_border']}; border-radius: 8px;")
+        mic_icon_lyt = QHBoxLayout(mic_icon_box)
+        mic_icon_lyt.setContentsMargins(0, 0, 0, 0)
+        mic_icon_lyt.addWidget(ms_icon("mic", 18, s['text_secondary']))
+        mic_il.addWidget(mic_icon_box)
+
+        mic_text_v = QVBoxLayout()
+        mic_text_v.setSpacing(2)
+        lbl_mic_caption = QLabel("目前錄音裝置")
+        lbl_mic_caption.setStyleSheet(f"font-size: 10px; color: {s['text_secondary']}; background: transparent;")
+        self.lbl_mic_current = QLabel("—")
+        self.lbl_mic_current.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {s['text_primary']}; background: transparent;")
+        mic_text_v.addWidget(lbl_mic_caption)
+        mic_text_v.addWidget(self.lbl_mic_current)
+        mic_il.addLayout(mic_text_v, stretch=1)
+
+        btn_mic_switch = QPushButton("切換設定")
+        btn_mic_switch.setFixedHeight(32)
+        btn_mic_switch.setObjectName("secondary")
+        btn_mic_switch.clicked.connect(lambda: self._on_sidebar_changed(6))
+        mic_il.addWidget(btn_mic_switch)
+
+        layout.addWidget(self.mic_info_card)
+        self.mic_info_card.setVisible(False)
+
         layout.addStretch()
         return page
 
@@ -2423,28 +2462,69 @@ class SettingsWindow(QMainWindow):
         self._check_local_models()
 
     def update_download_progress(self, status: str, pct: int = -1, done: bool = False):
-        """由 main.py 呼叫，更新模型下載進度卡片。
-        pct = 0-100 實際進度, -1 = 不確定（跑馬燈）, done=True 隱藏卡片。
+        """由 main.py 呼叫，更新模型下載 / 預熱進度卡片。
+        pct = 0-100 實際進度, -1 = 不確定（假進度條動畫）, done=True 完成。
         """
         try:
             if done:
-                self.download_card.setVisible(False)
-                self._check_local_models()
+                self._warmup_timer.stop()
+                # 快速跑完進度條至 100%，再隱藏
+                self.download_progress.setRange(0, 100)
+                self.download_progress.setValue(100)
+                self.lbl_download_pct.setText("100%")
+                QTimer.singleShot(600, self._on_warmup_done)
                 return
 
             self.download_card.setVisible(True)
             self.lbl_download_status.setText(status)
 
             if pct < 0:
-                # 不確定進度 → 跑馬燈
-                self.download_progress.setRange(0, 0)
-                self.lbl_download_pct.setText("⏳")
-            else:
+                # 不確定進度 → 啟動假進度條 Timer（慢速爬升至 90%）
                 self.download_progress.setRange(0, 100)
+                if not self._warmup_timer.isActive():
+                    self._warmup_fake_pct = 0
+                    self._warmup_timer.start()
+                self.lbl_download_pct.setText(f"{self._warmup_fake_pct}%")
+            else:
+                self._warmup_timer.stop()
                 self.download_progress.setValue(pct)
                 self.lbl_download_pct.setText(f"{pct}%")
         except Exception:
             pass
+
+    def _warmup_tick(self):
+        """假進度條每次 tick 推進，最高到 90% 等待真正完成訊號。"""
+        try:
+            step = 3 if self._warmup_fake_pct < 30 else (2 if self._warmup_fake_pct < 60 else 1)
+            self._warmup_fake_pct = min(self._warmup_fake_pct + step, 90)
+            self.download_progress.setValue(self._warmup_fake_pct)
+            self.lbl_download_pct.setText(f"{self._warmup_fake_pct}%")
+        except Exception:
+            pass
+
+    def _on_warmup_done(self):
+        """進度條完成後：隱藏 download_card，顯示麥克風資訊卡。"""
+        try:
+            self.download_card.setVisible(False)
+            self._check_local_models()
+            self._update_mic_info_card()
+            self.mic_info_card.setVisible(True)
+        except Exception:
+            pass
+
+    def _update_mic_info_card(self):
+        """更新麥克風資訊卡顯示的裝置名稱。"""
+        try:
+            device_idx = self.config.get("mic_device")
+            if device_idx is None:
+                name = "系統預設 (System Default)"
+            else:
+                import sounddevice as sd
+                dev = sd.query_devices(device_idx)
+                name = dev['name'] if dev else f"裝置 #{device_idx}"
+            self.lbl_mic_current.setText(name)
+        except Exception:
+            self.lbl_mic_current.setText("系統預設 (System Default)")
 
     def _check_all_permissions(self):
         import logging

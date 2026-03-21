@@ -45,9 +45,9 @@ DEFAULT_CONFIG = {
     # UI
     "ui_skin": "titanium",
     # 麥克風
-    "mic_device": None,   # None = 系統預設
-    "mic_gain": 50,       # 視覺音量感度倍率 (5~200)
-    "mic_gain_auto": True, # 自動調整感度
+    "mic_device": None,      # None = 系統預設
+    "mic_gain": 100,         # 手動基底放大倍率（50~300，100=×1.0 不變）
+    "mic_gain_auto": True,   # 啟用 AGC 自動微調
 }
 # 🗝️ 本地設定白名單 (不進行雲端同步的項目)
 LOCAL_KEYS = {

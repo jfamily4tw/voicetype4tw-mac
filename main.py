@@ -80,7 +80,7 @@ DEFAULT_ASSISTANT_PROMPT = (
 
 class VoiceTypeApp(QObject):
     ui_signal = pyqtSignal(dict)           # {"type": "prefix"|"state", "value": str}
-    download_signal = pyqtSignal(str, int) # (msg, pct)  pct=-1 表示不確定進度
+    download_signal = pyqtSignal(str, int, bool) # (msg, pct, done)
     
     def __init__(self):
         super().__init__() # Initialize QObject base class
@@ -101,7 +101,7 @@ class VoiceTypeApp(QObject):
             channels=1,
             level_callback=self.indicator.set_level,
             device=self.config.get("mic_device"),
-            gain=self.config.get("mic_gain", 50),
+            gain=self.config.get("mic_gain", 100),
             gain_auto=self.config.get("mic_gain_auto", True),
         )
         
@@ -282,7 +282,12 @@ class VoiceTypeApp(QObject):
             self.ui_signal.emit({"type": "hide", "value": None})
             self._is_manually_cancelled = False
             return
-            
+
+        if self.recorder.is_silent:
+            print("[main] Recording is silent (below threshold), skipping STT.")
+            self.ui_signal.emit({"type": "hide", "value": None})
+            return
+
         print("[main] Starting STT process thread...")
         self.ui_signal.emit({"type": "state", "value": "processing"})
         threading.Thread(target=self._process_audio, args=(audio_data,), daemon=True).start()
@@ -491,6 +496,10 @@ class VoiceTypeApp(QObject):
                     self.ui_signal.emit({"type": "suffix", "value": str(e)})
                     final_text = text
 
+            # --- 2.5. LLM 未啟用時套用輕量版靈魂規則 ---
+            if not is_llm_used:
+                final_text = self._apply_basic_soul_rules(final_text)
+
             # --- 3. 標點轉換與格式過濾 ---
             replacements = {
                 ',': '，', '.': '.', '?': '？', '!': '！', 
@@ -595,6 +604,44 @@ class VoiceTypeApp(QObject):
         except:
             pass
 
+    def _apply_basic_soul_rules(self, text: str) -> str:
+        """LLM 未啟用時，套用可直接執行的靈魂規則：移除句號、清除贅詞。"""
+        import re
+
+        # 解析 soul 檔案的贅詞清除規則區段，提取引號內的詞語
+        # （包含句號 「。」 等規則，由使用者自己在 soul 裡控制，不 hardcode）
+        def _extract_filler_words(file_path):
+            if not file_path or not file_path.exists():
+                return []
+            content = file_path.read_text(encoding='utf-8')
+            in_section = False
+            words = []
+            for line in content.split('\n'):
+                if '贅詞清除規則' in line:
+                    in_section = True
+                    continue
+                if in_section:
+                    if line.startswith('#'):
+                        break
+                    words.extend(re.findall(r'「([^」]+)」', line))
+            return words
+
+        try:
+            from paths import SOUL_BASE_PATH, SOUL_SCENARIO_DIR
+            filler_words = _extract_filler_words(SOUL_BASE_PATH)
+            scenario_name = self.config.get("active_scenario", "default")
+            scenario_path = SOUL_SCENARIO_DIR / f"{scenario_name}.md"
+            filler_words.extend(_extract_filler_words(scenario_path))
+
+            # 較長的詞先處理，避免短詞破壞長詞的匹配
+            filler_words.sort(key=len, reverse=True)
+            for word in filler_words:
+                text = text.replace(word, '')
+        except Exception as e:
+            print(f"[process] basic_soul_rules filler error: {e}")
+
+        return text.strip()
+
     def _build_llm_prompt(self, text, is_assistant=False):
         # v2.7.32 b7: 優化 Prompt 順序 - 規則優先，資料在後 (防止 LLM 輸出身份設定)
         parts = []
@@ -667,10 +714,10 @@ class VoiceTypeApp(QObject):
 
         return "\n\n".join(parts)
 
-    def _handle_download_signal(self, msg: str, pct: int):
+    def _handle_download_signal(self, msg: str, pct: int, done: bool):
         """主執行緒：將下載進度更新到設定視窗。"""
         if self.settings_window:
-            self.settings_window.update_download_progress(msg, pct=pct)
+            self.settings_window.update_download_progress(msg, pct=pct, done=done)
 
     def _load_models_async(self):
         """背景執行緒：下載模型 → 預熱 Metal → 載入 LLM。"""
@@ -685,15 +732,15 @@ class VoiceTypeApp(QObject):
             # 1. 下載模型（含進度回報）
             if hasattr(self.stt, 'download_model'):
                 def on_download_progress(pct, msg):
-                    self.download_signal.emit(msg, pct)
+                    self.download_signal.emit(msg, pct, False)
                 self.stt.download_model(progress_callback=on_download_progress)
 
             # 2. 預熱 Metal
-            self.download_signal.emit("正在初始化 Metal 加速...", -1)
+            self.download_signal.emit("正在初始化 Metal 加速...", -1, False)
             self.stt.warmup()
 
             # 3. 載入 LLM
-            self.download_signal.emit("正在載入 AI 引擎...", -1)
+            self.download_signal.emit("正在載入 AI 引擎...", -1, False)
             self.llm = get_llm(self.config)
             self.llm.warmup()
 
@@ -710,18 +757,10 @@ class VoiceTypeApp(QObject):
     def _on_models_error(self, error_msg):
         print(f"[main] !!! FAILED to load models: {error_msg}")
         self.indicator.hide()
-        try:
-            if self.settings_window:
-                self.settings_window.update_download_progress(f"❌ 載入失敗", done=True)
-        except Exception: 
-            pass
+        self.download_signal.emit("❌ 載入失敗", -1, True)
 
     def _notify_settings_download_done(self):
-        try:
-            if self.settings_window:
-                self.settings_window.update_download_progress("✅ 模型已就緒！", done=True)
-        except Exception: 
-            pass
+        self.download_signal.emit("✅ 模型已就緒！", -1, True)
 
     def _on_quit(self):
         print("[main] Shutting down...")
@@ -789,7 +828,7 @@ class VoiceTypeApp(QObject):
                     self.hotkey_listener.start()
             # Refresh mic device / gain if changed
             self.recorder.device = self.config.get("mic_device")
-            self.recorder.gain = self.config.get("mic_gain", 50)
+            self.recorder.gain = self.config.get("mic_gain", 100)
             self.recorder.gain_auto = self.config.get("mic_gain_auto", True)
 
             # Refresh tray menu if needed

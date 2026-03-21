@@ -1975,7 +1975,7 @@ class SettingsWindow(QMainWindow):
         hdr_left.setSpacing(3)
         lbl_title = QLabel("系統設定")
         lbl_title.setStyleSheet(f"font-size: 30px; font-weight: 800; color: {s['text_primary']}; letter-spacing: -1px; background: transparent;")
-        lbl_sub = QLabel("配置您的鈦金錄音環境，優化工作流程與硬體性能。")
+        lbl_sub = QLabel("配置您的錄音環境，優化工作流程與硬體性能。")
         lbl_sub.setStyleSheet(f"font-size: 12px; color: {s['text_secondary']}; background: transparent;")
         hdr_left.addWidget(lbl_title)
         hdr_left.addWidget(lbl_sub)
@@ -1991,7 +1991,7 @@ class SettingsWindow(QMainWindow):
         hotkey_card = GlassCard()
         hl = QVBoxLayout(hotkey_card)
         hl.setContentsMargins(20, 20, 20, 20)
-        hl.setSpacing(14)
+        hl.setSpacing(6)
 
         hk_hdr = QHBoxLayout()
         hk_icon = ms_icon("keyboard", 18, s['text_secondary'])
@@ -2002,87 +2002,83 @@ class SettingsWindow(QMainWindow):
         hk_hdr.addStretch()
         hl.addLayout(hk_hdr)
 
-        def _hotkey_row(label_text, key_attr, test_btn_attr, test_signal):
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(10)
+        # ─ 統一 Grid：保證所有子項目欄位對齊 ─
+        row_grid = QGridLayout()
+        row_grid.setContentsMargins(0, 0, 0, 0)
+        row_grid.setHorizontalSpacing(10)
+        row_grid.setVerticalSpacing(14)
+        row_grid.setColumnMinimumWidth(0, 130)
+        row_grid.setColumnStretch(1, 1)   # 輸入欄拉伸
+        row_grid.setColumnMinimumWidth(2, 54)  # 右側按鈕欄固定最小寬
+
+        _lbl_style = f"font-size: 13px; font-weight: bold; color: {s['text_primary']}; background: transparent;"
+        _test_style = f"""
+            QPushButton {{
+                background: {s['btn_secondary_bg']}; color: {s['text_secondary']};
+                border: none; border-radius: 8px; font-size: 11px; font-weight: bold; padding: 0;
+            }}
+            QPushButton:hover {{ background: {s['selection_bg']}; color: {s['text_primary']}; }}
+        """
+
+        def _add_hotkey_row(grid_row, label_text, key_attr, test_btn_attr):
             lbl = QLabel(label_text)
-            lbl.setFixedWidth(130)
-            lbl.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {s['text_primary']}; background: transparent;")
+            lbl.setStyleSheet(_lbl_style)
             btn = HotkeyRecorderButton(self.config.get(key_attr, ""))
             btn.setFixedHeight(36)
             test_btn = QPushButton("測試")
-            test_btn.setFixedHeight(36)
+            test_btn.setFixedHeight(30)
             test_btn.setFixedWidth(54)
-            test_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: {s['btn_secondary_bg']}; color: {s['text_secondary']};
-                    border: none; border-radius: 8px; font-size: 11px; font-weight: bold; padding: 0;
-                }}
-                QPushButton:hover {{ background: {s['selection_bg']}; color: {s['text_primary']}; }}
-            """)
+            test_btn.setStyleSheet(_test_style)
             setattr(self, test_btn_attr, test_btn)
-            row.addWidget(lbl)
-            row.addWidget(btn, stretch=1)
-            row.addWidget(test_btn)
-            return row, btn
+            row_grid.addWidget(lbl, grid_row, 0)
+            row_grid.addWidget(btn, grid_row, 1)
+            row_grid.addWidget(test_btn, grid_row, 2)
+            return btn
 
-        ptt_row, self.btn_ptt = _hotkey_row("PTT 按住通話", "hotkey_ptt", "btn_test_rec", None)
+        self.btn_ptt = _add_hotkey_row(0, "ㅤㅤㅤPTT 按住通話", "hotkey_ptt", "btn_test_rec")
         self.btn_test_rec.pressed.connect(self.test_start.emit)
         self.btn_test_rec.released.connect(self.test_stop.emit)
-        hl.addLayout(ptt_row)
 
-        toggle_row_w, self.btn_toggle = _hotkey_row("Toggle 切換錄音", "hotkey_toggle", "btn_test_toggle", None)
+        self.btn_toggle = _add_hotkey_row(1, "ㅤㅤㅤToggle 切換錄音", "hotkey_toggle", "btn_test_toggle")
         self.btn_test_toggle.clicked.connect(self.test_toggle.emit)
-        hl.addLayout(toggle_row_w)
 
-        llm_row_w, self.btn_llm = _hotkey_row("LLM 精煉轉寫", "hotkey_llm", "btn_test_llm", None)
+        self.btn_llm = _add_hotkey_row(2, "ㅤㅤㅤLLM 強啟PTT", "hotkey_llm", "btn_test_llm")
         self.btn_test_llm.clicked.connect(self.test_llm.emit)
-        hl.addLayout(llm_row_w)
 
-        # ─ 分隔線 ─
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {s['bg_input_border']}; background: {s['bg_input_border']}; border: none; max-height: 1px;")
-        hl.addWidget(sep)
-
-        # ─ 麥克風選擇 ─
+        # ─ 麥克風選擇 header（橫跨全欄）─
         mic_hdr = QHBoxLayout()
+        mic_hdr.setContentsMargins(0, 0, 0, 0)
         mic_hdr.setSpacing(6)
-        mic_hdr_icon = ms_icon("mic", 16, s['text_secondary'])
+        mic_hdr_icon = ms_icon("mic", 18, s['text_secondary'])
         mic_hdr_title = QLabel("麥克風選擇")
-        mic_hdr_title.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {s['text_primary']}; background: transparent;")
+        mic_hdr_title.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {s['text_primary']}; background: transparent;")
         mic_hdr.addWidget(mic_hdr_icon)
         mic_hdr.addWidget(mic_hdr_title)
         mic_hdr.addStretch()
-        hl.addLayout(mic_hdr)
+        row_grid.addLayout(mic_hdr, 3, 0, 1, 3)
 
-        # 裝置選單列
-        mic_dev_row = QHBoxLayout()
-        mic_dev_row.setSpacing(8)
-        mic_dev_lbl = QLabel("輸入裝置")
-        mic_dev_lbl.setFixedWidth(130)
-        mic_dev_lbl.setStyleSheet(f"font-size: 13px; color: {s['text_primary']}; background: transparent;")
+        # 輸入裝置列
+        mic_dev_lbl = QLabel("ㅤㅤㅤ輸入裝置")
+        mic_dev_lbl.setStyleSheet(_lbl_style)
         self.mic_device_combo = QComboBox()
         self.mic_device_combo.setFixedHeight(36)
         self._last_mic_device_names = []
         self._populate_mic_devices()
         btn_refresh_mic = QPushButton()
-        btn_refresh_mic.setFixedSize(36, 36)
+        btn_refresh_mic.setFixedSize(36, 30)
         btn_refresh_mic.setToolTip("重新偵測麥克風裝置")
         btn_refresh_mic.setLayout(QHBoxLayout())
         btn_refresh_mic.layout().setContentsMargins(0, 0, 0, 0)
         refresh_icon = ms_icon("refresh", 16, s['text_secondary'])
         btn_refresh_mic.layout().addWidget(refresh_icon)
         btn_refresh_mic.setStyleSheet(f"""
-            QPushButton {{ background: {s['bg_input']}; border: 1px solid {s['bg_input_border']}; border-radius: 8px; }}
-            QPushButton:hover {{ border-color: {s['text_secondary']}; }}
+            QPushButton {{ background: {s['btn_secondary_bg']}; border: none; border-radius: 8px; }}
+            QPushButton:hover {{ background: {s['selection_bg']}; }}
         """)
         btn_refresh_mic.clicked.connect(self._populate_mic_devices)
-        mic_dev_row.addWidget(mic_dev_lbl)
-        mic_dev_row.addWidget(self.mic_device_combo, stretch=1)
-        mic_dev_row.addWidget(btn_refresh_mic)
-        hl.addLayout(mic_dev_row)
+        row_grid.addWidget(mic_dev_lbl, 4, 0)
+        row_grid.addWidget(self.mic_device_combo, 4, 1)
+        row_grid.addWidget(btn_refresh_mic, 4, 2, Qt.AlignmentFlag.AlignVCenter)
 
         # 自動偵測插拔
         self._mic_poll_timer = QTimer(self)
@@ -2090,37 +2086,47 @@ class SettingsWindow(QMainWindow):
         self._mic_poll_timer.start(2000)
 
         # 音量感度列
-        mic_gain_row = QHBoxLayout()
-        mic_gain_row.setSpacing(8)
-        mic_gain_lbl = QLabel("音量感度")
-        mic_gain_lbl.setFixedWidth(130)
-        mic_gain_lbl.setStyleSheet(f"font-size: 13px; color: {s['text_primary']}; background: transparent;")
+        mic_gain_lbl = QLabel("ㅤㅤㅤ音量感度")
+        mic_gain_lbl.setStyleSheet(_lbl_style)
         self.mic_gain_slider = QSlider(Qt.Orientation.Horizontal)
-        self.mic_gain_slider.setRange(5, 200)
-        self.mic_gain_slider.setValue(self.config.get("mic_gain", 50))
+        self.mic_gain_slider.setRange(50, 300)   # 50=×0.5，100=×1.0（不變），300=×3.0
+        self.mic_gain_slider.setValue(self.config.get("mic_gain", 100))
         self.mic_gain_slider.setFixedHeight(36)
-        self.mic_gain_val_lbl = QLabel(f"×{self.config.get('mic_gain', 50)}")
-        self.mic_gain_val_lbl.setFixedWidth(38)
+        self.mic_gain_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 4px; background: {s['bg_input_border']}; border-radius: 2px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {s['text_primary']}; border-radius: 2px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {s['text_primary']}; width: 14px; height: 14px;
+                margin: -5px 0; border-radius: 7px;
+            }}
+        """)
+        _gain_init = self.config.get("mic_gain", 100)
+        self.mic_gain_val_lbl = QLabel(f"×{_gain_init / 100:.1f}")
+        self.mic_gain_val_lbl.setFixedWidth(42)
         self.mic_gain_val_lbl.setStyleSheet(f"font-size: 12px; color: {s['text_secondary']}; background: transparent;")
         self.mic_gain_slider.valueChanged.connect(
-            lambda v: self.mic_gain_val_lbl.setText(f"×{v}")
+            lambda v: self.mic_gain_val_lbl.setText(f"×{v / 100:.1f}")
         )
         self.mic_gain_auto_toggle = ToggleSwitch(checked=self.config.get("mic_gain_auto", True))
         auto_lbl = QLabel("自動")
         auto_lbl.setStyleSheet(f"font-size: 12px; color: {s['text_secondary']}; background: transparent;")
 
-        def _update_gain_slider_state(checked):
-            self.mic_gain_slider.setEnabled(not checked)
-            self.mic_gain_val_lbl.setEnabled(not checked)
-        self.mic_gain_auto_toggle.toggled.connect(_update_gain_slider_state)
-        _update_gain_slider_state(self.mic_gain_auto_toggle.isChecked())
+        # 放大倍率右側：slider + 數值 + 自動 + toggle，橫跨第 1-2 欄
+        gain_right = QHBoxLayout()
+        gain_right.setContentsMargins(0, 0, 0, 0)
+        gain_right.setSpacing(10)
+        gain_right.addWidget(self.mic_gain_slider, stretch=1)
+        gain_right.addWidget(self.mic_gain_val_lbl)
+        gain_right.addWidget(auto_lbl)
+        gain_right.addWidget(self.mic_gain_auto_toggle)
+        row_grid.addWidget(mic_gain_lbl, 5, 0)
+        row_grid.addLayout(gain_right, 5, 1, 1, 2)
 
-        mic_gain_row.addWidget(mic_gain_lbl)
-        mic_gain_row.addWidget(self.mic_gain_slider, stretch=1)
-        mic_gain_row.addWidget(self.mic_gain_val_lbl)
-        mic_gain_row.addWidget(auto_lbl)
-        mic_gain_row.addWidget(self.mic_gain_auto_toggle)
-        hl.addLayout(mic_gain_row)
+        hl.addLayout(row_grid)
 
         hl.addStretch()
         top_row.addWidget(hotkey_card, stretch=3)
@@ -2422,7 +2428,7 @@ class SettingsWindow(QMainWindow):
         self.memory_inject_toggle.setChecked(self.config.get("memory_enabled", True))
         # 麥克風設定
         self._populate_mic_devices()
-        self.mic_gain_slider.setValue(self.config.get("mic_gain", 50))
+        self.mic_gain_slider.setValue(self.config.get("mic_gain", 100))
         self.mic_gain_auto_toggle.setChecked(self.config.get("mic_gain_auto", True))
         self.debug_demo_mode.setChecked(self.config.get("is_demo", False))
         self.output_prefix.setChecked(self.config.get("output_prefix", False))

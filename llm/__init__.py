@@ -23,4 +23,7 @@ def get_llm(config: dict) -> BaseLLM:
         return DeepSeekLLM(config)
     else:
         from .ollama import OllamaLLM
-        return OllamaLLM(config)
+        return OllamaLLM(
+            model=config.get("ollama_model", "llama3"),
+            base_url=config.get("ollama_base_url", "http://localhost:11434"),
+        )

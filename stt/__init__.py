@@ -1,9 +1,10 @@
 from .base import BaseSTT
+from config import resolve_stt_engine
 
 # Lazy imports: 各引擎只在選中時才 import，避免未安裝的套件造成啟動失敗。
 
 def get_stt(config: dict) -> BaseSTT:
-    engine = config.get("stt_engine", "mlx_whisper")
+    engine = resolve_stt_engine(config.get("stt_engine"))
     if engine == "mlx_whisper":
         from .mlx_whisper import MLXWhisperSTT
         return MLXWhisperSTT(config)
@@ -19,4 +20,3 @@ def get_stt(config: dict) -> BaseSTT:
     else:
         from .local_whisper import LocalWhisperSTT
         return LocalWhisperSTT(config)
-

@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 def get_site_packages_path():
@@ -81,6 +82,32 @@ def fix_bundle(app_path=None):
         # Explicitly set permissions for the Homebrew-sourced dylibs
         os.chmod(target_ssl, 0o755)
         os.chmod(target_crypto, 0o755)
+        try:
+            subprocess.run(
+                ["install_name_tool", "-id", "@executable_path/../Frameworks/libcrypto.3.dylib", str(target_crypto)],
+                check=True,
+            )
+            subprocess.run(
+                ["install_name_tool", "-id", "@executable_path/../Frameworks/libssl.3.dylib", str(target_ssl)],
+                check=True,
+            )
+            for old_ref in [
+                "/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib",
+                "/opt/homebrew/Cellar/openssl@3/3.6.1/lib/libcrypto.3.dylib",
+                "/opt/homebrew/Cellar/openssl@3/3.6.2/lib/libcrypto.3.dylib",
+            ]:
+                subprocess.run(
+                    [
+                        "install_name_tool",
+                        "-change",
+                        old_ref,
+                        "@executable_path/../Frameworks/libcrypto.3.dylib",
+                        str(target_ssl),
+                    ],
+                    check=False,
+                )
+        except Exception as e:
+            print(f"[Post-Build Fix] OpenSSL install_name_tool patch skipped: {e}")
 
     print("[Post-Build Fix] Done!")
 

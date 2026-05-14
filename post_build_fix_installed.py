@@ -2,6 +2,7 @@
 post_build_fix_installed.py: Same as post_build_fix.py but targets the INSTALLED
 /Applications/嘴炮輸入法.app instead of dist/. Run this after installing the DMG.
 """
+import subprocess
 import shutil
 from pathlib import Path
 
@@ -45,6 +46,36 @@ def fix_installed():
         if target_dyn_mlx_lib.exists():
             shutil.rmtree(target_dyn_mlx_lib)
         shutil.copytree(src_lib_dir, target_dyn_mlx_lib)
+
+    target_ssl = app_dir / "Contents/Frameworks/libssl.3.dylib"
+    target_crypto = app_dir / "Contents/Frameworks/libcrypto.3.dylib"
+    if target_ssl.exists() and target_crypto.exists():
+        try:
+            subprocess.run(
+                ["install_name_tool", "-id", "@executable_path/../Frameworks/libcrypto.3.dylib", str(target_crypto)],
+                check=True,
+            )
+            subprocess.run(
+                ["install_name_tool", "-id", "@executable_path/../Frameworks/libssl.3.dylib", str(target_ssl)],
+                check=True,
+            )
+            for old_ref in [
+                "/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib",
+                "/opt/homebrew/Cellar/openssl@3/3.6.1/lib/libcrypto.3.dylib",
+                "/opt/homebrew/Cellar/openssl@3/3.6.2/lib/libcrypto.3.dylib",
+            ]:
+                subprocess.run(
+                    [
+                        "install_name_tool",
+                        "-change",
+                        old_ref,
+                        "@executable_path/../Frameworks/libcrypto.3.dylib",
+                        str(target_ssl),
+                    ],
+                    check=False,
+                )
+        except Exception as e:
+            print(f"[Installed App Fix] OpenSSL install_name_tool patch skipped: {e}")
 
     print("[Installed App Fix] Done! Restart 嘴炮輸入法 now.")
 

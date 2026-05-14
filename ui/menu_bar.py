@@ -11,12 +11,15 @@ class VoiceTypeMenuBar:
     and handles state, delegating the actual rendering to TrayManager.
     """
     def __init__(self, config: dict, on_quit: Callable, on_toggle_llm: Callable,
-                 on_set_translation: Callable, on_config_saved: Callable = None):
+                 on_set_translation: Callable, on_config_saved: Callable = None,
+                 on_set_scenario: Callable = None, on_set_format: Callable = None):
         self.config = config
         self.on_quit = on_quit
         self.on_toggle_llm = on_toggle_llm
         self.on_set_translation = on_set_translation
         self.on_config_saved = on_config_saved
+        self.on_set_scenario = on_set_scenario
+        self.on_set_format = on_set_format
         self.tray = None  # Set by main.py
 
     def get_menu_items(self) -> List[Dict]:
@@ -94,37 +97,41 @@ class VoiceTypeMenuBar:
         self.refresh_ui()
 
     def _set_scenario(self, sender):
-        latest = load_config()
         name = self._get_sender_text(sender)
         print(f"[menu] Scenario Selected: {name}")
         import re
         internal_name = re.sub(r'^[\W_]+', '', name).strip()
         if "基底靈魂" in name: internal_name = "default"
-        
-        latest["active_scenario"] = internal_name
-        save_config(latest)
-        self.config.clear()
-        self.config.update(latest)
-        
-        if hasattr(self, 'on_config_saved') and callable(self.on_config_saved):
-            self.on_config_saved()
+
+        if callable(self.on_set_scenario):
+            self.on_set_scenario(internal_name)
+        else:
+            latest = load_config()
+            latest["active_scenario"] = internal_name
+            save_config(latest)
+            self.config.clear()
+            self.config.update(latest)
+            if hasattr(self, 'on_config_saved') and callable(self.on_config_saved):
+                self.on_config_saved()
         self.refresh_ui()
 
     def _set_format(self, sender):
-        latest = load_config()
         name = self._get_sender_text(sender)
         print(f"[menu] Format Selected: {name}")
         import re
         internal_name = re.sub(r'^[\W_]+', '', name).strip()
         if "自然排版" in name: internal_name = "natural"
-        
-        latest["active_format"] = internal_name
-        save_config(latest)
-        self.config.clear()
-        self.config.update(latest)
-        
-        if hasattr(self, 'on_config_saved') and callable(self.on_config_saved):
-            self.on_config_saved()
+
+        if callable(self.on_set_format):
+            self.on_set_format(internal_name)
+        else:
+            latest = load_config()
+            latest["active_format"] = internal_name
+            save_config(latest)
+            self.config.clear()
+            self.config.update(latest)
+            if hasattr(self, 'on_config_saved') and callable(self.on_config_saved):
+                self.on_config_saved()
         self.refresh_ui()
 
     def _use_template(self, sender):

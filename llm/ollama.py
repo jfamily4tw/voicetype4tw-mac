@@ -18,6 +18,7 @@ class OllamaLLM(BaseLLM):
         }
         try:
             # Use smaller timeout for local Ollama to fail fast if not running
+            print(f"[llm] Ollama request -> {self.base_url}/api/chat model={self.model}")
             resp = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=5)
             resp.raise_for_status()
             result = resp.json()["message"]["content"].strip()

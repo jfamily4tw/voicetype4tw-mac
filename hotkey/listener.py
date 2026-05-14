@@ -88,9 +88,11 @@ class HotkeyListener:
         self._tap = None
         self._key_states: Dict[int, bool] = {}
         self._last_event_flags = 0
+        self._pending_release_timers: Dict[str, threading.Timer] = {}
         
         # Windows specific
         self._win_listener = None
+        self._mac_listener = None
 
         self.key_combos: Dict[str, Dict] = {} # mode -> {mask, keycode}
         if not IS_WINDOWS:
@@ -149,6 +151,13 @@ class HotkeyListener:
                 except Exception:
                     pass
         else:
+            if self._mac_listener:
+                self._mac_listener.stop()
+                try:
+                    self._mac_listener.join()
+                except Exception:
+                    pass
+                self._mac_listener = None
             if self._run_loop:
                 from Foundation import CFRunLoopStop
                 CFRunLoopStop(self._run_loop)
@@ -180,10 +189,57 @@ class HotkeyListener:
         except ImportError: pass
 
     def _start_macos(self):
+        self._start_macos_pynput_fallback()
         if self._loop_thread and self._loop_thread.is_alive():
             return
         self._loop_thread = threading.Thread(target=self._run_macos, daemon=True)
         self._loop_thread.start()
+
+    def _normalize_hotkey_name(self, value: str) -> str:
+        import re
+
+        value = (value or "").lower().strip()
+        code_match = re.search(r'\(?code:(\d+)\)?', value)
+        if code_match:
+            code = int(code_match.group(1))
+            code_to_name = {
+                54: "cmd_r",
+                55: "cmd",
+                56: "shift",
+                58: "alt",
+                59: "ctrl",
+                60: "shift_r",
+                61: "alt_r",
+                62: "ctrl_r",
+                63: "fn",
+                105: "f13",
+                107: "f14",
+                113: "f15",
+            }
+            return code_to_name.get(code, f"code:{code}")
+        return value
+
+    def _start_macos_pynput_fallback(self):
+        try:
+            from pynput import keyboard
+
+            def on_press(key):
+                k_str = key_to_str(key)
+                for mode, cfg_key in self.configs.items():
+                    if self._normalize_hotkey_name(cfg_key) == k_str:
+                        self._handle_press(mode)
+
+            def on_release(key):
+                k_str = key_to_str(key)
+                for mode, cfg_key in self.configs.items():
+                    if self._normalize_hotkey_name(cfg_key) == k_str:
+                        self._handle_release(mode)
+
+            self._mac_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+            self._mac_listener.start()
+            self.log.info("macOS pynput fallback listener started.")
+        except Exception as e:
+            self.log.warning(f"macOS pynput fallback listener failed: {e}")
 
     def _run_macos(self):
         import Quartz
@@ -275,6 +331,9 @@ class HotkeyListener:
         return event
 
     def _handle_press(self, mode: str):
+        timer = self._pending_release_timers.pop(mode, None)
+        if timer:
+            timer.cancel()
 
         # v2.8.6: Enhanced Toggle logic
         if mode == "toggle":
@@ -291,16 +350,36 @@ class HotkeyListener:
             threading.Thread(target=self.on_start, args=(mode,), daemon=True).start()
 
     def _handle_release(self, mode: str):
-
         # Toggle mode ignores release (it stops on next press)
         if mode == "toggle": 
             return 
+        combo = self.key_combos.get(mode, {})
+        is_modifier_only = combo.get("mask") == 0 and combo.get("keycode") in [54, 55, 56, 58, 59, 60, 61, 62, 63]
+        if is_modifier_only:
+            timer = self._pending_release_timers.pop(mode, None)
+            if timer:
+                timer.cancel()
+
+            def confirm_release():
+                if self._active_mode == mode:
+                    self._active_mode = None
+                    threading.Thread(target=self.on_stop, args=(mode,), daemon=True).start()
+                self._pending_release_timers.pop(mode, None)
+
+            timer = threading.Timer(0.12, confirm_release)
+            timer.daemon = True
+            self._pending_release_timers[mode] = timer
+            timer.start()
+            return
+
         if self._active_mode == mode:
             self._active_mode = None
             threading.Thread(target=self.on_stop, args=(mode,), daemon=True).start()
     def reset_state(self):
         """External call to sync state when recording is manipulated via UI."""
+        for timer in self._pending_release_timers.values():
+            timer.cancel()
+        self._pending_release_timers = {}
         self._active_mode = None
         self._key_states = {}
         self.log.debug("[hotkey] State reset")
-

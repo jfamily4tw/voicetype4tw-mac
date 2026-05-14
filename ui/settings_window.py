@@ -5,6 +5,8 @@ Features tabs for General, STT/LLM, Vocab/Memory, and Stats.
 import sys
 import os
 import platform
+import subprocess
+import shutil
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -522,6 +524,7 @@ class SettingsWindow(QMainWindow):
         self.config = load_config()
         self.on_save = on_save
         self._is_dark = True
+        self._ollama_models = []
 
         # 載入 skin
         skin_name = self.config.get("ui_skin", "titanium")
@@ -529,6 +532,8 @@ class SettingsWindow(QMainWindow):
 
         self._setup_ui()
         self._load_data()
+        self.llm_engine.currentIndexChanged.connect(self._on_llm_engine_changed)
+        self.btn_refresh_ollama_models.clicked.connect(self._refresh_ollama_models)
         
         # 根據語言動態設定視窗標題
         from paths import VERSION_NAME
@@ -696,6 +701,89 @@ class SettingsWindow(QMainWindow):
         self.stack.setCurrentIndex(idx)
         # Dashboard (0) and Stats (5) hide save buttons
         self.footer_widget.setVisible(idx not in [0, 5])
+
+    def _read_ollama_models(self):
+        ollama_bin = (
+            shutil.which("ollama")
+            or ("/usr/local/bin/ollama" if Path("/usr/local/bin/ollama").exists() else None)
+            or ("/opt/homebrew/bin/ollama" if Path("/opt/homebrew/bin/ollama").exists() else None)
+            or (
+                "/Applications/Ollama.app/Contents/Resources/ollama"
+                if Path("/Applications/Ollama.app/Contents/Resources/ollama").exists()
+                else None
+            )
+        )
+        if not ollama_bin:
+            log.warning("[ollama] Binary not found in app environment.")
+            return []
+
+        try:
+            result = subprocess.run(
+                [ollama_bin, "list"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError) as exc:
+            log.warning("[ollama] Failed to read local models: %s", exc)
+            return []
+
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            log.warning("[ollama] `ollama list` failed: %s", stderr or f"exit={result.returncode}")
+            return []
+
+        models = []
+        for line in (result.stdout or "").splitlines():
+            raw = line.strip()
+            if not raw or raw.upper().startswith("NAME"):
+                continue
+            name = raw.split()[0].strip()
+            if name and name not in models:
+                models.append(name)
+        return models
+
+    def _refresh_ollama_models(self):
+        current_model = (
+            self.ollama_model.currentData()
+            or self.ollama_model.currentText().strip()
+            or self.config.get("ollama_model", "llama3:8b")
+        )
+        self._ollama_models = self._read_ollama_models()
+
+        self.ollama_model.blockSignals(True)
+        self.ollama_model.clear()
+
+        if self._ollama_models:
+            for model_name in self._ollama_models:
+                self.ollama_model.addItem(model_name, model_name)
+        else:
+            self.ollama_model.addItem("未偵測到已安裝模型", "")
+
+        if current_model and current_model not in self._ollama_models:
+            self.ollama_model.addItem(current_model, current_model)
+
+        target_index = self.ollama_model.findData(current_model)
+        if target_index >= 0:
+            self.ollama_model.setCurrentIndex(target_index)
+        else:
+            self.ollama_model.setEditText(current_model)
+
+        self.ollama_model.blockSignals(False)
+        self._update_llm_engine_ui()
+
+    def _update_llm_engine_ui(self):
+        current_engine = self.llm_engine.currentData() or self.llm_engine.currentText().lower()
+        is_ollama = current_engine == "ollama"
+        self.ollama_row.setVisible(is_ollama)
+        self.ollama_model.setVisible(is_ollama)
+
+    def _on_llm_engine_changed(self):
+        if (self.llm_engine.currentData() or self.llm_engine.currentText().lower()) == "ollama":
+            self._refresh_ollama_models()
+            return
+        self._update_llm_engine_ui()
 
     def _create_sync_page(self):
         s = self.skin
@@ -1352,6 +1440,32 @@ class SettingsWindow(QMainWindow):
         for eng in LLM_ENGINES:
             self.llm_engine.addItem(eng.capitalize() if eng != "openai" else "OpenAI", eng)
         llm_layout.addWidget(self.llm_engine)
+
+        self.ollama_row = QWidget()
+        ollama_row_layout = QHBoxLayout(self.ollama_row)
+        ollama_row_layout.setContentsMargins(0, 0, 0, 0)
+        ollama_row_layout.setSpacing(8)
+        ollama_left = QVBoxLayout()
+        ollama_left.setContentsMargins(0, 0, 0, 0)
+        ollama_left.setSpacing(4)
+        self.lbl_ollama_model = QLabel("Ollama 本機模型")
+        self.lbl_ollama_model.setStyleSheet(f"font-size: 11px; color: {s['text_secondary']}; background: transparent;")
+        self.lbl_ollama_hint = QLabel("依據 `ollama list` 顯示目前已安裝模型")
+        self.lbl_ollama_hint.setStyleSheet(f"font-size: 10px; color: {s['text_secondary']}; background: transparent;")
+        ollama_left.addWidget(self.lbl_ollama_model)
+        ollama_left.addWidget(self.lbl_ollama_hint)
+        ollama_row_layout.addLayout(ollama_left)
+        ollama_row_layout.addStretch()
+        self.btn_refresh_ollama_models = QPushButton("重新整理")
+        self.btn_refresh_ollama_models.setObjectName("secondary")
+        self.btn_refresh_ollama_models.setFixedHeight(32)
+        ollama_row_layout.addWidget(self.btn_refresh_ollama_models)
+        llm_layout.addWidget(self.ollama_row)
+
+        self.ollama_model = QComboBox()
+        self.ollama_model.setEditable(True)
+        self.ollama_model.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        llm_layout.addWidget(self.ollama_model)
 
         # 注入模式
         lbl_mode = QLabel("內容注入模式（Injection Mode）")
@@ -2405,6 +2519,7 @@ class SettingsWindow(QMainWindow):
         self.llm_enabled.setChecked(self.config.get("llm_enabled", False))
         llm_eng_idx = self.llm_engine.findData(self.config.get("llm_engine", "ollama"))
         if llm_eng_idx >= 0: self.llm_engine.setCurrentIndex(llm_eng_idx)
+        self._refresh_ollama_models()
         llm_mode_idx = self.llm_mode.findData(self.config.get("llm_mode", "replace"))
         if llm_mode_idx >= 0: self.llm_mode.setCurrentIndex(llm_mode_idx)
         
@@ -2747,11 +2862,14 @@ class SettingsWindow(QMainWindow):
         self._refresh_vocab()
 
     def _save_action(self):
-        self.config["stt_engine"] = "mlx_whisper"
+        from config import resolve_stt_engine
+
+        self.config["stt_engine"] = resolve_stt_engine(self.config.get("stt_engine"))
         # whisper_model 由 _select_model_card() 即時寫入 self.config，這裡只確保同步
         self.config["language"] = self.language.currentData() or self.language.currentText()
         self.config["llm_enabled"] = self.llm_enabled.isChecked()
         self.config["llm_engine"] = self.llm_engine.currentData() or self.llm_engine.currentText()
+        self.config["ollama_model"] = self.ollama_model.currentData() or self.ollama_model.currentText().strip() or self.config.get("ollama_model", "llama3:8b")
         self.config["llm_mode"] = self.llm_mode.currentData() or self.llm_mode.currentText()
         self.config["openai_api_key"] = self.openai_key.text().strip()
         self.config["anthropic_api_key"] = self.anthropic_key.text().strip()
@@ -2792,15 +2910,25 @@ class SettingsWindow(QMainWindow):
         import subprocess
         import sys
         import os
-        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "self_check.py")
-        if os.path.exists(script_path):
+        from pathlib import Path
+
+        current_file = Path(__file__).resolve()
+        candidate_paths = [
+            current_file.parents[3] / "self_check.py",  # py2app bundle: Contents/Resources/self_check.py
+            current_file.parents[1] / "self_check.py",  # source tree fallback
+            current_file.parents[2] / "self_check.py",  # legacy fallback
+        ]
+        script_path = next((str(path) for path in candidate_paths if path.exists()), None)
+
+        if script_path:
             # Launch in a new terminal window on Windows
             if platform.system() == "Windows":
                 subprocess.Popen(["cmd.exe", "/c", "start", sys.executable, script_path])
             else:
                 subprocess.Popen([sys.executable, script_path])
         else:
-            QMessageBox.warning(self, "錯誤", f"找不到檢測程式：{script_path}")
+            expected = candidate_paths[0]
+            QMessageBox.warning(self, "錯誤", f"找不到檢測程式：{expected}")
 
     def _view_debug_log(self):
         from paths import APP_DATA_DIR

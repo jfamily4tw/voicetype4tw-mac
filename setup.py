@@ -9,6 +9,9 @@ sys.setrecursionlimit(5000)
 APP = ['main.py']
 DATA_FILES = [
     'assets',
+    ('', [
+        'self_check.py',
+    ]),
     ('soul/scenario', [
         'soul/scenario/default.md',
         'soul/scenario/情商大師.md',
@@ -40,8 +43,8 @@ OPTIONS = {
         'CFBundleDisplayName': '嘴炮輸入法',
         'CFBundleIdentifier': 'com.jimmy4tw.voicetype4tw-mac',
         'NSPrincipalClass': 'NSApplication',
-        'CFBundleVersion': '2.9.0',
-        'CFBundleShortVersionString': '2.9.0',
+        'CFBundleVersion': '2.9.7',
+        'CFBundleShortVersionString': '2.9.7',
         'NSMicrophoneUsageDescription': 'VoiceType4TW requires microphone access for speech recognition.',
         'NSAccessibilityUsageDescription': '嘴炮輸入法需要輔助使用權限來監聽全域快捷鍵並自動貼上文字。',
         'NSAppleEventsUsageDescription': '嘴炮輸入法需要透過 AppleEvents 與其他程式互動以完成文字注入。',
@@ -56,7 +59,7 @@ OPTIONS = {
         # Audio
         'sounddevice', '_sounddevice_data',
         # Network / LLM
-        'httpx', 'certifi',
+        'httpx', 'certifi', 'requests', 'openai', 'anthropic',
         # macOS Bridge
         'objc', 'Quartz',
         # Hotkey / Clipboard
@@ -70,6 +73,7 @@ OPTIONS = {
     ],
     'includes': [
         'numpy',
+        'AppKit', 'Foundation',
         'mlx', 'mlx.core', 'mlx.nn', 'mlx.nn.layers',
         'mlx.optimizers', 'mlx.utils', 'mlx.extension',
         'mlx._reprlib_fix', 'mlx._distributed_utils'

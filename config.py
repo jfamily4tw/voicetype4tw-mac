@@ -1,12 +1,39 @@
+import importlib.util
 import json
 import os
+import platform
+
+
+def _has_module(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
+
+
+def resolve_stt_engine(engine: str | None = None) -> str:
+    """
+    Pick a safe STT backend for the current machine.
+
+    - Apple Silicon with mlx-whisper installed: prefer MLX.
+    - Intel Mac or missing mlx-whisper: fall back to local_whisper.
+    - Explicit cloud engines keep their original value.
+    """
+    explicit = (engine or "").strip().lower()
+    if explicit in {"groq", "openrouter", "gemini", "local_whisper"}:
+        return explicit
+
+    wants_mlx = explicit in {"", "auto", "mlx_whisper"}
+    is_apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
+
+    if wants_mlx and is_apple_silicon and _has_module("mlx_whisper"):
+        return "mlx_whisper"
+
+    return "local_whisper"
 
 DEFAULT_CONFIG = {
     "hotkey_ptt": "alt_r",
     "hotkey_toggle": "f13",
     "hotkey_llm": "f14",
     # STT
-    "stt_engine": "mlx_whisper",
+    "stt_engine": resolve_stt_engine(),
     "whisper_model": "medium",
     "groq_api_key": "",
     "language": "zh",

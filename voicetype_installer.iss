@@ -2,7 +2,7 @@
 ; 創辦人視角：提供極速、穩定的安裝體驗
 
 #define MyAppName "VoiceType4TW"
-#define MyAppVersion "2.8.27_V90"
+#define MyAppVersion "3.0.1_win-go-mask"
 #define MyAppPublisher "jfamily"
 #define MyAppURL "https://github.com/jfamily4tw/voicetype4tw-mac"
 #define MyAppExeName "run_voicetype.bat"
@@ -19,7 +19,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 ; 創辦人偏好：簡潔、專業的安裝介面
-OutputBaseFilename=VoiceType4TW_Setup_V90
+OutputBaseFilename=VoiceType4TW_Setup_win-go-mask_v3.0.1
 SetupIconFile={#MyIcon}
 Compression=lzma
 SolidCompression=yes

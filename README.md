@@ -1,4 +1,4 @@
-# VoiceType4TW 嘴炮輸入法 — Windows 專用版 (V3.0.0)
+# VoiceType4TW 嘴炮輸入法 — Windows 專用版 (win-go-mask v3.0.1)
 
 主要開發者：吉米丘 , CC58TW 
 協助開發者：Claude Code

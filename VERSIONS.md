@@ -4,7 +4,9 @@
 
 ---
 
-## [v3.0.1] - 2026-07-08 (True Portable Release, BUILD-3010-STABLE)
+## [win-go-mask v3.0.1] - 2026-07-08 (True Portable Release, BUILD-3010-STABLE)
+> 2026-07-08 起，`win-go-mask-202607` 正式作為 Windows 主線來源，推進 `win-stable`。
+
 ### 真可攜版：解壓即用 ZIP 打包系統
 - **`release_win.ps1` 全面改寫**：從「複製現有 .runtime」改為**自建完整可攜環境**——在 `dist/` staging 內下載嵌入式 Python 3.12、安裝全部依賴（Full 版含 CUDA）、隨附 medium 模型（`bundled_models/`）、放入 Starter EXE（無現成檔會用內建 csc 現場編譯）、生成「可攜版說明.txt」、`tar.exe`（ZIP64）壓縮。版本號自動從 paths.py 讀取。`-Lite`（無 CUDA 無模型）與 `-SkipZip` 參數。
 - **`paths.py` 隨附模型自動安裝**：`initialize_paths()` 新增 `_install_bundled_models()`——解壓即用時 launcher 看到 `.runtime` 就緒會直接啟動 App（跳過 setup 的模型安裝），因此 App 首次啟動自行把 `bundled_models/` 複製進 `%APPDATA%`，已存在則跳過。

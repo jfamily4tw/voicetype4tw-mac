@@ -7,6 +7,17 @@
 
 免費版歡迎大家測試使用，GitHub開源的Python版，想自己抓下來研究、裝在電腦裡都OK
 
+## 授權與共創
+
+本專案採用 [MIT License](LICENSE)，歡迎大家研究、修改、分享與一起共創。
+
+想參與開發或協助整理文件，可以從這幾個入口開始：
+
+- 有 bug 或使用問題：請開 [GitHub Issue](https://github.com/jfamily4tw/voicetype4tw-mac/issues)，附上平台、版本、重現步驟與相關 log。
+- 有功能建議：請先開 Issue 描述使用情境，方便大家討論方向。
+- 想直接改程式或文件：請 fork 專案後開 branch，再送 [Pull Request](https://github.com/jfamily4tw/voicetype4tw-mac/pulls)。
+- 共創細節、PR 格式與分支說明請看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 
 目前有macOS有三個版本：
 

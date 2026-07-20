@@ -151,6 +151,8 @@ class VoiceTypeApp(QObject):
         self.download_signal.connect(self._handle_download_signal)
         self._models_ready = False
         self.stt = None
+        self._is_quitting = False
+        self._quit_lock = threading.Lock()
 
         self.indicator = MicIndicator()
         # Ensure indicator is initialized
@@ -297,6 +299,7 @@ class VoiceTypeApp(QObject):
             QApplication.instance().setQuitOnLastWindowClosed(False)
 
         try:
+            self._register_process_termination_cleanup()
             # macOS: rumps wants the main thread; drive Qt events via rumps timer
             def drive_qt_events():
                 try:
@@ -311,6 +314,16 @@ class VoiceTypeApp(QObject):
             print(f"[main] FATAL ERROR in execution loop: {e}")
             import traceback
             traceback.print_exc()
+
+    def _register_process_termination_cleanup(self):
+        """Run cleanup when macOS handles native Quit/Cmd-Q outside our menu item."""
+        try:
+            import rumps.events
+            rumps.events.before_quit.register(self._cleanup_runtime)
+            log.info("[run] native termination cleanup hook registered.")
+        except Exception as e:
+            log.warning(f"[run] failed to register native termination cleanup hook: {e}")
+
     def _show_settings(self):
         """Callback from menu bar to show the settings window."""
         from PyQt6.QtCore import QTimer
@@ -869,19 +882,41 @@ class VoiceTypeApp(QObject):
     def _notify_settings_download_done(self):
         self.download_signal.emit("✅ 模型已就緒！", -1, True)
 
-    def _on_quit(self):
-        print("[main] Shutting down...")
+    def _cleanup_runtime(self):
+        with self._quit_lock:
+            if self._is_quitting:
+                return
+            self._is_quitting = True
+
+        print("[main] Shutting down runtime...")
         try:
             if self.tray:
                 self.tray.stop_ticker()
+        except Exception:
+            pass
+
+        try:
             if self.hotkey_listener:
                 self.hotkey_listener.stop()
+        except Exception:
+            pass
+
+        try:
+            self._stt_queue.put_nowait(None)
+            if self._stt_worker and self._stt_worker.is_alive():
+                self._stt_worker.join(timeout=1.0)
+        except Exception:
+            pass
+
+        try:
             # 釋放 MLX Metal 快取
             if hasattr(self.stt, '_clear_metal_cache'):
                 self.stt._clear_metal_cache()
         except Exception:
             pass
 
+    def _on_quit(self):
+        self._cleanup_runtime()
         print("[main] Clean exit.")
         os._exit(0)
 

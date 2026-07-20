@@ -105,6 +105,11 @@ class HotkeyListener:
         self._watchdog_stop = threading.Event()
         self._watchdog_thread: Optional[threading.Thread] = None
         self._WATCHDOG_INTERVAL_SEC = 5.0
+        self._WATCHDOG_INITIAL_REENABLES = 3
+        # After the initial burst, keep retrying once per minute instead of
+        # giving up forever. A transient macOS/TCC hiccup should not require
+        # the user to restart the whole app.
+        self._WATCHDOG_SLOW_RETRY_EVERY = 12
 
         # v2.9.11: Keystrike log 非同步寫檔 queue
         self._keystrike_queue: queue.Queue = queue.Queue(maxsize=10000)
@@ -266,34 +271,44 @@ class HotkeyListener:
         self.log.info("[hotkey] Watchdog started.")
 
     def _watchdog_loop(self):
-        """Watchdog: 若 tap 曾經正常、後來被停用，才重啟；一直無效表示沒有
-        Accessibility 權限，連續失敗 3 次後停掉 watchdog 避免日誌洗版。"""
+        """Watchdog: 若 tap 曾經正常、後來被停用，先密集重啟；仍無效時
+        改成低頻持續重試，避免 log 洗版但不讓熱鍵永久假死。"""
         # 啟動後先等一輪，讓 tap 穩定
         if self._watchdog_stop.wait(self._WATCHDOG_INTERVAL_SEC):
             return
         consecutive_disabled = 0
-        MAX_CONSECUTIVE = 3
         while not self._watchdog_stop.is_set():
             try:
                 if self._tap is not None:
                     alive = Quartz.CGEventTapIsEnabled(self._tap)
                     if not alive:
                         consecutive_disabled += 1
-                        if consecutive_disabled <= MAX_CONSECUTIVE:
+                        if self._should_retry_disabled_tap(consecutive_disabled):
+                            if consecutive_disabled > self._WATCHDOG_INITIAL_REENABLES:
+                                self.log.warning(
+                                    "[hotkey] Watchdog: tap still disabled after %d checks; "
+                                    "retrying at low frequency."
+                                    % consecutive_disabled
+                                )
                             self._re_enable_tap("watchdog-detected")
-                        elif consecutive_disabled == MAX_CONSECUTIVE + 1:
+                        elif consecutive_disabled == self._WATCHDOG_INITIAL_REENABLES + 1:
                             self.log.warning(
                                 "[hotkey] Watchdog: tap 連續 %d 次無法啟用 — "
-                                "通常代表『輔助使用權限』未授予。停止重試以避免洗版。"
-                                % MAX_CONSECUTIVE
+                                "改為低頻持續重試，避免需要重啟 app 才恢復。"
+                                % self._WATCHDOG_INITIAL_REENABLES
                             )
-                        # else: silent — 已經放棄
                     else:
                         consecutive_disabled = 0
             except Exception as e:
                 self.log.error(f"[hotkey] Watchdog check failed: {e}")
             if self._watchdog_stop.wait(self._WATCHDOG_INTERVAL_SEC):
                 break
+
+    def _should_retry_disabled_tap(self, consecutive_disabled: int) -> bool:
+        """Return whether watchdog should try to re-enable a disabled tap now."""
+        if consecutive_disabled <= self._WATCHDOG_INITIAL_REENABLES:
+            return True
+        return consecutive_disabled % self._WATCHDOG_SLOW_RETRY_EVERY == 0
 
     # ── v2.9.11: Keystrike log 非同步寫檔 ────────────────────────────
     def _start_keystrike_writer(self):

@@ -11,18 +11,21 @@ class VoiceTypeMenuBar:
     and handles state, delegating the actual rendering to TrayManager.
     """
     def __init__(self, config: dict, on_quit: Callable, on_toggle_llm: Callable,
-                 on_set_translation: Callable, on_config_saved: Callable = None):
+                 on_set_translation: Callable, on_config_saved: Callable = None,
+                 on_toggle_local_correction: Callable = None):
         self.config = config
         self.on_quit = on_quit
         self.on_toggle_llm = on_toggle_llm
         self.on_set_translation = on_set_translation
         self.on_config_saved = on_config_saved
+        self.on_toggle_local_correction = on_toggle_local_correction
         self.tray = None  # Set by main.py
 
     def get_menu_items(self) -> List[Dict]:
         """Builds the full menu structure for the macOS menu bar."""
         from paths import EDITION, SOUL_SCENARIO_DIR
         llm_state = "ON" if self.config.get("llm_enabled") else "OFF"
+        correction_state = "ON" if self.config.get("apple_local_correction_enabled") else "OFF"
         engine = self.config.get("stt_engine", "mlx_whisper")
 
         items = [
@@ -31,6 +34,7 @@ class VoiceTypeMenuBar:
             {'label': "---", 'callback': None},
             {'label': f"辨識引擎: {engine}", 'callback': None},
             {'label': "---", 'callback': None},
+            {'label': f"本機快速校正 : {correction_state}", 'callback': self._toggle_local_correction},
             {'label': f"AI 潤飾/翻譯 : {llm_state}", 'callback': self._toggle_llm},
         ]
 
@@ -140,6 +144,11 @@ class VoiceTypeMenuBar:
 
     def _toggle_llm(self, _):
         self.on_toggle_llm()
+        self.refresh_ui()
+
+    def _toggle_local_correction(self, _):
+        if self.on_toggle_local_correction:
+            self.on_toggle_local_correction()
         self.refresh_ui()
 
     def _translate_en(self): self.on_set_translation("en"); self.refresh_ui()

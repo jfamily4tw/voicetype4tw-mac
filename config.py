@@ -11,6 +11,7 @@ DEFAULT_CONFIG = {
     "groq_api_key": "",
     "language": "zh",
     # LLM
+    "apple_local_correction_enabled": False,
     "llm_enabled": False,
     "llm_engine": "openrouter",
     "llm_mode": "replace",   # "replace" | "fast"
@@ -23,6 +24,9 @@ DEFAULT_CONFIG = {
     "anthropic_model": "claude-3-haiku-20240307",
     "openrouter_api_key": "",
     "openrouter_model": "google/gemini-2.5-flash",
+    "apple_local_model": "FoundationModels",
+    "apple_local_timeout": 5.0,
+    "apple_local_max_tokens": 700,
     "gemini_api_key": "",
     "gemini_model": "gemini-2.0-flash",
     "gemini_stt_model": "gemini-2.0-flash",

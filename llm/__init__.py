@@ -13,6 +13,9 @@ def get_llm(config: dict) -> BaseLLM:
     elif engine == "openrouter":
         from .openrouter import OpenRouterLLM
         return OpenRouterLLM(config)
+    elif engine == "apple_local":
+        from .apple_local import AppleLocalLLM
+        return AppleLocalLLM(config)
     elif engine == "gemini":
         from .gemini import GeminiLLM
         return GeminiLLM(config)

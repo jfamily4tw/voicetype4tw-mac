@@ -1,7 +1,7 @@
 # VoiceType4TW 嘴炮輸入法
 
-主要開發者：吉米丘 , CC58TW 
-協助開發者：Codex、Claude、Gemini、Nebula
+主要開發者：吉米丘, CC58TW
+GitHub 協作者：JayC-TW, go-mask, chrisliuqq
 
 吉米與女兒CC58TW全新開發的嘴炮輸入法，讓你出一張嘴就能打字的輸入法
 
@@ -53,10 +53,10 @@ Win 咖啡版：為了讓大家一鍵安裝到好，我搞了三天弄了90個�
 
 ## 為什麼做這套工具
 
-![Dashboard](assets/screenshot-01.png)
+![Dashboard](assets/screenshot-dashboard-2.9.18.png)
 
 靈感來自TypeLess這類語音輸入工具，但因為授權限制與雲端依賴，我就想：能不能做一套「完全可以在本地端自己掌握」的語音輸入工具  
-於是就結合Apple Silicon的本地Whisper能力，再加上Gemini、Nebula等AI夥伴，一起打造出這套專為Mac打造的VoiceType4TW，也就是嘴炮輸入法
+於是就結合 Apple Silicon 的本地 Whisper 能力與可切換的 AI 校正流程，一起打造出這套專為 Mac 打造的 VoiceType4TW，也就是嘴炮輸入法
 
 ---
 

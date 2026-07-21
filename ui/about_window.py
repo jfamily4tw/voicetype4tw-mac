@@ -11,7 +11,7 @@ class AboutDialog(QDialog):
     def __init__(self, is_dark=False):
         super().__init__()
         self.setWindowTitle("關於 VoiceType4TW")
-        self.setFixedSize(300, 350)
+        self.setFixedSize(360, 370)
         self._is_dark = is_dark
         self._setup_ui()
 
@@ -54,14 +54,14 @@ class AboutDialog(QDialog):
         credit_box = QVBoxLayout()
         credit_box.setSpacing(5)
         
-        dev_label = QLabel("主要開發者：吉米丘,CC58TW")
+        dev_label = QLabel("主要開發者：吉米丘, CC58TW")
         dev_label.setStyleSheet(f"color: {text_color}; font-size: 13px;")
         dev_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        assist_label = QLabel("協助開發者：Gemini + Nebula")
+        assist_label = QLabel("GitHub 協作者：JayC-TW, go-mask, chrisliuqq")
         assist_label.setStyleSheet(f"color: {text_color}; font-size: 13px;")
         assist_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         credit_box.addWidget(dev_label)
         credit_box.addWidget(assist_label)
         layout.addLayout(credit_box)

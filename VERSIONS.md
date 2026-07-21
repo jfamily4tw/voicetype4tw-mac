@@ -4,6 +4,23 @@
 
 ---
 
+## [v2.9.18] - 2026-07-21 (Coffee Release)
+### Apple Local 本機快速校正與簡繁保險
+- **本機快速校正**：新增 Apple Foundation Models helper，支援在 STT 後用 Apple Local 進行快速校正。
+- **模式拆分**：新增「本機快速校正（Apple Local）」獨立開關，與「AI 潤飾/翻譯」分離；本機校正只做文字校正，不套用雲端 LLM 靈魂。
+- **選單控制**：Menu Bar 新增本機快速校正 ON/OFF，方便即時切換。
+- **簡繁保險**：加入 OpenCC 簡轉繁後處理，修正 Whisper 偶發輸出 `列进来`、`协助开发者` 等簡體字。
+- **句尾保護**：Apple Local helper 加強保留既有句號、問號、驚嘆號與口語問句標點；LLM 未啟用時仍保留既有輕量版靈魂規則。
+- **詞彙修復**：短英文縮寫不再被模糊詞彙修正誤改，避免 `STT` 被改成 `PTT`。
+- **打包更新**：build 流程會先編譯 Apple Local helper，並將 helper 與 OpenCC 一起納入 app bundle。
+
+| 項目 | 值 |
+|------|-----|
+| BUILD_ID | `BUILD-2998-RELEASE` |
+| Coffee Edition DMG | `嘴炮輸入法_v2.9.18-Coffee-Edition_macOS.dmg` |
+
+---
+
 ## [v2.9.16] - 2026-05-24 (Coffee Release)
 ### 長靜音幻覺與翻譯模式污染修復
 - **長靜音幻覺過濾**：新增高比例重複 token / n-gram 偵測，阻擋「通過」連發、`anterior access` 長尾重複等 Whisper 靜音幻覺。

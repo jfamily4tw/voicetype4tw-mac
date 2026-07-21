@@ -26,6 +26,10 @@ DEFAULT_VOCAB = [
     "繁體中文", "人工智慧", "機器學習", "語音辨識", "自動化", "工作流程","OpenClaw",
 ]
 
+COMMON_ALIAS_CORRECTIONS = {
+    "Talescale": "Tailscale",
+}
+
 
 def _ensure_dir():
     VOCAB_DIR.mkdir(parents=True, exist_ok=True)
@@ -134,8 +138,8 @@ def learn_from_text_with_llm(llm_client, text: str):
 def load_all_learned_words() -> list:
     """回傳所有學到的詞彙，包含未達門檻的。"""
     memory = load_auto_memory()
-    # 依出現次數排序
-    return [w for w, c in sorted(memory.items(), key=lambda x: -x[1])]
+    # AI 學習清單用出現次數排序，方便判斷哪些詞最常被說到。
+    return [w for w, c in sorted(memory.items(), key=lambda x: (-x[1], x[0].casefold(), x[0]))]
 
 
 def promote_learned_word(word: str):
@@ -202,9 +206,16 @@ def apply_vocab_correction(text: str) -> str:
     if not text:
         return text
     custom = load_custom_vocab()
+    for wrong, right in COMMON_ALIAS_CORRECTIONS.items():
+        if right in custom and wrong in text:
+            text = text.replace(wrong, right)
+            print(f"[vocab] 修正: 「{wrong}」→「{right}」")
     # 只處理 3 字以上的詞，避免過度替換短詞
     targets = sorted([w for w in custom if len(w) >= 3], key=len, reverse=True)
     for vocab_word in targets:
+        # Do not fuzzy-correct short ASCII acronyms like STT/PTT/API.
+        # Edit distance 1 is too aggressive for these and changes real terms.
+        fuzzy_enabled = not (len(vocab_word) <= 4 and vocab_word.isascii() and vocab_word.isalnum())
         wlen = len(vocab_word)
         i = 0
         result = []
@@ -213,7 +224,7 @@ def apply_vocab_correction(text: str) -> str:
             if substr == vocab_word:
                 result.append(vocab_word)
                 i += wlen
-            elif _edit_distance_1(substr, vocab_word):
+            elif fuzzy_enabled and _edit_distance_1(substr, vocab_word):
                 result.append(vocab_word)
                 i += wlen
                 print(f"[vocab] 修正: 「{substr}」→「{vocab_word}」")

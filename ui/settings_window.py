@@ -22,7 +22,7 @@ from paths import SOUL_BASE_PATH, SOUL_SCENARIO_DIR, SOUL_FORMAT_DIR, SOUL_TEMPL
 from ui.skin_manager import SkinManager, AVAILABLE_SKINS
 
 log = logging.getLogger("voicetype.ui")
-LLM_ENGINES = ["ollama", "openai", "claude", "openrouter", "gemini", "deepseek", "qwen", "minimax"]
+LLM_ENGINES = ["openrouter", "ollama", "openai", "claude", "gemini", "deepseek", "qwen", "minimax"]
 PROVIDER_MODELS = {
     "ollama":     [],
     "openai":     ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-mini", "o3-mini"],
@@ -639,7 +639,11 @@ class SettingsWindow(QMainWindow):
         
         # Credits and SNS at Bottom
         from paths import VERSION_NAME, BUILD_ID
-        credit_box = QLabel(f"{VERSION_NAME} | {BUILD_ID}\n主要開發者：吉米丘, CC58TW\n協助開發者：Gemini, Nebula")
+        credit_box = QLabel(
+            f"{VERSION_NAME} | {BUILD_ID}\n"
+            "主要開發者：吉米丘, CC58TW\n"
+            "GitHub 協作者：JayC-TW, go-mask, chrisliuqq"
+        )
         credit_box.setStyleSheet("color: #555; font-size: 10px; margin-left: 25px; line-height: 1.2;")
         sidebar_layout.addWidget(credit_box)
         
@@ -1343,6 +1347,27 @@ class SettingsWindow(QMainWindow):
         lbl_llm_hdr = QLabel("大語言模型潤飾（LLM REFINEMENT）")
         lbl_llm_hdr.setStyleSheet(f"font-size: 9px; font-weight: bold; letter-spacing: 1px; color: {s['text_secondary']}; background: transparent;")
         llm_layout.addWidget(lbl_llm_hdr)
+
+        # Apple 本機快速校正開關列
+        local_correct_row = QWidget()
+        local_correct_row.setStyleSheet(f"background: {s['bg_input']}; border-radius: 8px;")
+        lc_h = QHBoxLayout(local_correct_row)
+        lc_h.setContentsMargins(14, 12, 14, 12)
+        lc_left = QVBoxLayout()
+        lc_left.setSpacing(2)
+        lbl_lc_title = QLabel("本機快速校正（Apple Local）")
+        lbl_lc_title.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {s['text_primary']}; background: transparent;")
+        lbl_lc_desc = QLabel("STT 後補標點與斷句，不套用靈魂")
+        lbl_lc_desc.setStyleSheet(f"font-size: 11px; color: {s['text_secondary']}; background: transparent;")
+        lc_left.addWidget(lbl_lc_title)
+        lc_left.addWidget(lbl_lc_desc)
+        lc_h.addLayout(lc_left)
+        lc_h.addStretch()
+        self.apple_local_correction_enabled = ToggleSwitch(
+            checked=self.config.get("apple_local_correction_enabled", False)
+        )
+        lc_h.addWidget(self.apple_local_correction_enabled)
+        llm_layout.addWidget(local_correct_row)
 
         # 啟用開關列
         llm_toggle_row = QWidget()
@@ -2478,6 +2503,9 @@ class SettingsWindow(QMainWindow):
         else: self.language.setCurrentText(lang_val)
         
         self.llm_enabled.setChecked(self.config.get("llm_enabled", False))
+        self.apple_local_correction_enabled.setChecked(
+            self.config.get("apple_local_correction_enabled", False)
+        )
         llm_eng_idx = self.llm_engine.findData(self.config.get("llm_engine", "ollama"))
         if llm_eng_idx >= 0: self.llm_engine.setCurrentIndex(llm_eng_idx)
         self._on_llm_provider_changed()
@@ -2668,7 +2696,7 @@ class SettingsWindow(QMainWindow):
         self.vocab_list.clear()
         try:
             from vocab.manager import load_custom_vocab
-            for word in load_custom_vocab():
+            for word in sorted(load_custom_vocab(), key=lambda x: (x.casefold(), x)):
                 self.vocab_list.addItem(word)
         except: pass
 
@@ -2827,6 +2855,7 @@ class SettingsWindow(QMainWindow):
         self.config["stt_engine"] = "mlx_whisper"
         # whisper_model 由 _select_model_card() 即時寫入 self.config，這裡只確保同步
         self.config["language"] = self.language.currentData() or self.language.currentText()
+        self.config["apple_local_correction_enabled"] = self.apple_local_correction_enabled.isChecked()
         self.config["llm_enabled"] = self.llm_enabled.isChecked()
         llm_eng = self.llm_engine.currentData() or self.llm_engine.currentText()
         self.config["llm_engine"] = llm_eng

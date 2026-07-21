@@ -170,6 +170,7 @@ class VoiceTypeApp(QObject):
         
         self.injector = TextInjector()
         self.llm = None
+        self.local_corrector = None
         self._target_bundle_id = ""  # v2.9.9: 記住錄音開始時的目標 App，貼上時回切
         self._target_pid = 0         # v2.9.10: 目標 App PID，用於 CGEventPostToPid
 
@@ -261,6 +262,7 @@ class VoiceTypeApp(QObject):
             on_toggle_llm=self._on_toggle_llm,
             on_set_translation=self._on_set_translation,
             on_config_saved=self._on_config_saved,
+            on_toggle_local_correction=self._on_toggle_local_correction,
         )
         self.menu_bar.on_set_template = self._on_set_template
         # Override settings opening logic to use the already created window
@@ -515,6 +517,22 @@ class VoiceTypeApp(QObject):
                 text = apply_vocab_correction(text)
             except Exception as e:
                 print(f"[process] Vocab correction error: {e}")
+            stt_log_text = text
+
+            correction_used = False
+            correction_duration = 0.0
+            if self.config.get("apple_local_correction_enabled", False) and self.local_corrector:
+                try:
+                    print("[process] Apple Local correction...")
+                    correction_start_time = time.time()
+                    corrected = self.local_corrector.refine(text, "")
+                    correction_duration = time.time() - correction_start_time
+                    if corrected:
+                        text = corrected
+                    correction_used = True
+                    print(f"[process] Apple Local corrected: {text[:50]}... ({correction_duration:.2f}s)")
+                except Exception as e:
+                    print(f"[process] Apple Local correction failed: {e}")
 
             is_llm_used = False
             engine = self.config.get("llm_engine", "ollama")
@@ -644,7 +662,14 @@ class VoiceTypeApp(QObject):
                 print(f"[process] [NEWLINE] marker replaced with actual newline.")
 
             # --- 紀錄執行狀態 ---
-            self._log_execution(text, final_text, is_llm_used, engine, stt_duration, llm_duration)
+            log_engine = engine
+            log_duration = llm_duration
+            if correction_used and is_llm_used:
+                log_engine = f"apple_local_correction+{engine}"
+            elif correction_used:
+                log_engine = "apple_local_correction"
+                log_duration = correction_duration
+            self._log_execution(stt_log_text, final_text, is_llm_used or correction_used, log_engine, stt_duration, log_duration)
 
             # --- 4. 注入最終文字 (v2.8.0 B19: 已移除瀏覽器攔截) ---
             self.injector.inject(final_text, self._target_bundle_id, self._target_pid)
@@ -661,7 +686,7 @@ class VoiceTypeApp(QObject):
                     duration_sec = 0.0
                 
                 record_session(duration_sec, len(final_text))
-                add_entry(text, final_text) # 錄錄 STT 與 LLM 處理後的版本
+                add_entry(stt_log_text, final_text) # 記錄 STT 與處理後的版本
                 learn_from_text(final_text) # 自動學習常用詞彙
                 print(f"[stats] Recorded session: {duration_sec:.2f}s, {len(final_text)} chars")
             except Exception as e:
@@ -706,9 +731,12 @@ class VoiceTypeApp(QObject):
         if is_llm_used:
             # if showcase_mode is enabled, the final_text already contains everything, so avoid double printing
             if not self.config.get('showcase_mode', False):
-                label = self.config.get("active_scenario", "default")
-                if label == "default": 
-                    label = "底層靈魂"
+                if engine == "apple_local_correction":
+                    label = "本機快速校正"
+                else:
+                    label = self.config.get("active_scenario", "default")
+                    if label == "default": 
+                        label = "底層靈魂"
                 log_content.append(f"[{label}] {final_text} ( 處理時間：{llm_duration:.1f}秒 )")
         
         log_content.append("====================================\n")
@@ -720,7 +748,7 @@ class VoiceTypeApp(QObject):
             pass
 
     def _apply_basic_soul_rules(self, text: str) -> str:
-        """LLM 未啟用時，套用可直接執行的靈魂規則：移除句號、清除贅詞。"""
+        """LLM 未啟用時，套用可直接執行的靈魂規則：移除文末句號、清除贅詞。"""
         import re
 
         # 解析 soul 檔案的贅詞清除規則區段，提取引號內的詞語
@@ -750,8 +778,14 @@ class VoiceTypeApp(QObject):
 
             # 較長的詞先處理，避免短詞破壞長詞的匹配
             filler_words.sort(key=len, reverse=True)
+            strip_final_period = False
             for word in filler_words:
+                if word in {"。", ".", "．"}:
+                    strip_final_period = True
+                    continue
                 text = text.replace(word, '')
+            if strip_final_period:
+                text = re.sub(r"[。．.]+(\s*)$", r"\1", text)
         except Exception as e:
             print(f"[process] basic_soul_rules filler error: {e}")
 
@@ -863,6 +897,9 @@ class VoiceTypeApp(QObject):
             self.download_signal.emit("正在載入 AI 引擎...", -1, False)
             self.llm = get_llm(self.config)
             self.llm.warmup()
+            from llm.apple_local import AppleLocalLLM
+            self.local_corrector = AppleLocalLLM(self.config)
+            self.local_corrector.warmup()
 
             self._models_ready = True
             log.info("[models] === Models are READY. ===")
@@ -934,6 +971,15 @@ class VoiceTypeApp(QObject):
         if self.menu_bar:
             self.menu_bar.refresh_ui()
 
+    def _on_toggle_local_correction(self, enabled=None):
+        if enabled is None:
+            enabled = not self.config.get("apple_local_correction_enabled", False)
+        self.config["apple_local_correction_enabled"] = enabled
+        save_config(self.config)
+        print(f"[main] Apple Local correction toggled to: {enabled}")
+        if self.menu_bar:
+            self.menu_bar.refresh_ui()
+
     def _on_set_translation(self, lang):
         self.config["translation_lang"] = lang
         save_config(self.config)
@@ -982,7 +1028,9 @@ class VoiceTypeApp(QObject):
             try:
                 from llm import get_llm
                 from stt import get_stt
+                from llm.apple_local import AppleLocalLLM
                 self.llm = get_llm(self.config)
+                self.local_corrector = AppleLocalLLM(self.config)
                 print(f"[main] LLM reloaded: {self.config.get('llm_engine')}")
                 
                 self.stt = get_stt(self.config)

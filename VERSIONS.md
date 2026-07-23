@@ -4,6 +4,20 @@
 
 ---
 
+## [v2.9.19] - 2026-07-23 (Coffee Hotfix)
+### Apple Local prompt leak 防漏修復
+- **Prompt leak 防線**：修正 Apple Foundation Models 偶發回吐提示詞模板，造成輸入框貼出「原文 / 校正後文字」與 Markdown code fence 的問題。
+- **輸出清洗**：Python wrapper 會先抽取 `校正後文字` 區塊；若仍偵測到提示詞模板或 code fence，就回退到原始 STT 校正版，避免 prompt 被貼出。
+- **Prompt 降風險**：Swift helper 改成更短的 user prompt，並明確禁止輸出標籤、引號、Markdown 或說明。
+- **資料清理**：本機 `memory.json` 與 `auto_memory.json` 已移除本次 prompt leak 污染詞與污染紀錄，保留乾淨口述內容。
+
+| 項目 | 值 |
+|------|-----|
+| BUILD_ID | `BUILD-2999-HOTFIX` |
+| Coffee Edition DMG | `嘴炮輸入法_v2.9.19-Coffee-Edition_macOS.dmg` |
+
+---
+
 ## [v2.9.18] - 2026-07-21 (Coffee Release)
 ### Apple Local 本機快速校正與簡繁保險
 - **本機快速校正**：新增 Apple Foundation Models helper，支援在 STT 後用 Apple Local 進行快速校正。

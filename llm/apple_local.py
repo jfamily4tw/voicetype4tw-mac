@@ -68,6 +68,38 @@ class AppleLocalLLM(BaseLLM):
                 return output.rstrip() + "？" if output.rstrip().endswith(("嗎", "呢")) else output.rstrip() + "。"
         return output
 
+    def _strip_prompt_leak(self, output: str) -> str:
+        """Recover the corrected text when Foundation Models echoes the prompt."""
+        if not output:
+            return ""
+
+        leaked_markers = (
+            "如果原文已經有標點",
+            "請保留原本句界",
+            "原文：",
+            "校正後文字：",
+            "只可把半形標點轉為全形",
+        )
+        if not any(marker in output for marker in leaked_markers):
+            return output.strip()
+
+        # Prefer the fenced block after 校正後文字. This is the exact leak shape
+        # observed in debug.log on 2026-07-23.
+        match = re.search(r"校正後文字[:：]\s*```(?:[^\n`]*)\n?(.*?)```", output, re.S)
+        if match:
+            return match.group(1).strip()
+
+        # Fallback for a non-fenced answer: take the content after the label and
+        # remove common trailing fence debris.
+        match = re.search(r"校正後文字[:：]\s*(.+)$", output, re.S)
+        if match:
+            cleaned = match.group(1).strip()
+            cleaned = re.sub(r"^```(?:[^\n`]*)\n?", "", cleaned).strip()
+            cleaned = re.sub(r"```[。！？!?]?$", "", cleaned).strip()
+            return cleaned
+
+        return ""
+
     def warmup(self):
         if not self.helper_path.exists():
             return
@@ -83,6 +115,16 @@ class AppleLocalLLM(BaseLLM):
             pass
 
     def _looks_worse_than_input(self, original: str, output: str) -> bool:
+        leaked_markers = (
+            "如果原文已經有標點",
+            "請保留原本句界",
+            "原文：",
+            "校正後文字：",
+            "```",
+        )
+        if any(marker in output for marker in leaked_markers):
+            return True
+
         sentence_marks = set("。？！?!")
         for mark in "。？！":
             if output.count(mark) < original.count(mark):
@@ -130,7 +172,9 @@ class AppleLocalLLM(BaseLLM):
                 print(f"[AppleLocalLLM] Unavailable: {data.get('error')} ({data.get('availability')})")
                 return fallback_text
 
-            output = self._restore_sentence_tail(text, self._to_traditional((data.get("output") or "").strip()))
+            raw_output = (data.get("output") or "").strip()
+            cleaned_output = self._strip_prompt_leak(raw_output)
+            output = self._restore_sentence_tail(text, self._to_traditional(cleaned_output))
             if output and self._looks_worse_than_input(text, output):
                 print("[AppleLocalLLM] Output looked worse than input; fallback to input")
                 return fallback_text

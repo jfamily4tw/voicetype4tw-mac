@@ -110,16 +110,12 @@ struct AppleLocalLLM {
             專有名詞、品牌、姓名、機器名稱、清單項目必須逐一保留；不確定的詞也必須保留原字。
             已存在的句號、問號、驚嘆號與段落斷點必須保留或等價轉換，不可移除。
             不要把口語改成正式報告，不要改變使用者原本語氣。
-            只輸出校正後文字。
+            只輸出一行或多行校正後文字。不得輸出「原文」、「校正後文字」、Markdown code fence 或任何說明。
             """
             let session = LanguageModelSession(model: model, instructions: instructions)
             let prompt = """
-            請在保留每一個原始詞彙與清單項目的前提下，校正以下語音辨識文字。不可刪除任何名詞或項目。
-            如果原文已經有標點，請保留原本句界；只可把半形標點轉為全形，或補上缺少的標點。
-            原文：
-            \"\"\"
+            校正這段語音辨識文字；只回傳校正後文字，不要加標籤、引號或 Markdown：
             \(text)
-            \"\"\"
             """
             let options = GenerationOptions(
                 sampling: .greedy,

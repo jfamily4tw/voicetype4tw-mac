@@ -127,7 +127,7 @@
 
 ## 系統需求
 
-- **Windows 10/11**（Python 3.10–3.12；沒裝 Python 也沒關係，`setup_win.bat` 會自動下載可攜式 Python 3.12，不需要系統管理員權限）
+- **Windows 10/11**（Python 3.10–3.14；沒裝 Python 也沒關係，`setup_win.bat` 會自動下載可攜式 Python 3.12，不需要系統管理員權限）
 - **顯示卡**：有 NVIDIA GPU 自動安裝 CUDA 加速；沒有則自動改用 CPU 模式
 - **記憶體**：建議 16GB 以上
 - **磁碟空間**：約 5GB（含辨識模型）
@@ -153,12 +153,12 @@
 
 ## 開發者專區
 
-### 手動安裝（需 Python 3.10–3.12）
+### 手動安裝（需 Python 3.10–3.14）
 
 ```bat
 git clone -b win-go-mask-202607 https://github.com/jfamily4tw/voicetype4tw-mac.git
 cd voicetype4tw-mac
-py -3.12 -m venv venv
+py -3.14 -m venv venv
 venv\Scripts\activate
 pip install -r requirements-win.txt
 pip install -r requirements-cuda-win.txt   rem 有 NVIDIA GPU 才需要

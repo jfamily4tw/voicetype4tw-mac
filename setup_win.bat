@@ -18,24 +18,29 @@ if exist "%~dp0.runtime\python.exe" (
     goto BOOTSTRAP_PIP
 )
 
-rem Try the Python Launcher with a supported version (3.10 - 3.12)
+rem Try the Python Launcher with a supported version (3.10 - 3.14)
+rem 3.12 first (matches the shipped portable runtime), then newer, then older.
 where py >nul 2>&1
 if errorlevel 1 goto TRY_PYTHON_CMD
 py -3.12 -c "pass" >nul 2>&1
 if not errorlevel 1 ( set "PY_CMD=py -3.12" & echo [INFO] Using Python 3.12 via Launcher. & goto CHECK_DONE )
+py -3.13 -c "pass" >nul 2>&1
+if not errorlevel 1 ( set "PY_CMD=py -3.13" & echo [INFO] Using Python 3.13 via Launcher. & goto CHECK_DONE )
+py -3.14 -c "pass" >nul 2>&1
+if not errorlevel 1 ( set "PY_CMD=py -3.14" & echo [INFO] Using Python 3.14 via Launcher. & goto CHECK_DONE )
 py -3.11 -c "pass" >nul 2>&1
 if not errorlevel 1 ( set "PY_CMD=py -3.11" & echo [INFO] Using Python 3.11 via Launcher. & goto CHECK_DONE )
 py -3.10 -c "pass" >nul 2>&1
 if not errorlevel 1 ( set "PY_CMD=py -3.10" & echo [INFO] Using Python 3.10 via Launcher. & goto CHECK_DONE )
-echo [WARN] Python Launcher found, but no supported version (3.10-3.12) installed.
+echo [WARN] Python Launcher found, but no supported version (3.10-3.14) installed.
 
 :TRY_PYTHON_CMD
 rem Verify "python" is real (not the Microsoft Store alias) and a supported version
 where python >nul 2>&1
 if errorlevel 1 goto NO_PYTHON
-python -c "import sys; sys.exit(0 if (3,10) <= sys.version_info[:2] <= (3,12) else 1)" >nul 2>&1
+python -c "import sys; sys.exit(0 if (3,10) <= sys.version_info[:2] <= (3,14) else 1)" >nul 2>&1
 if not errorlevel 1 ( set "PY_CMD=python" & echo [INFO] Detected compatible python command. & goto CHECK_DONE )
-echo [WARN] "python" command is missing or not a supported version (3.10-3.12).
+echo [WARN] "python" command is missing or not a supported version (3.10-3.14).
 goto NO_PYTHON
 
 :BOOTSTRAP_PIP

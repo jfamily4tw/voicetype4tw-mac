@@ -4,6 +4,15 @@
 
 ---
 
+## [v3.0.2] - 2026-08-20 (Python 3.13/3.14 Support, BUILD-3020-STABLE)
+### 放寬 Python 支援範圍至 3.10–3.14
+- **相容性偵察全綠**：24 個依賴全數提供 cp314 Windows wheel（含關鍵原生套件 ctranslate2 4.8.1、onnxruntime 1.29、numpy 2.5.2；PyQt6 為 abi3 通用）。實測 Python 3.14.2：53 套件零編譯安裝、Whisper medium 實際辨識、CUDA GPU 偵測、PyQt6 設定視窗離屏渲染全部通過。
+- **`setup_win.bat`**：偵測順序改為 3.12（出貨基準優先）→ 3.13 → 3.14 → 3.11 → 3.10；`python` 指令版本檢查同步放寬。
+- **開發機遷移**：本機 venv 由 3.11.9 重建為 3.14.2（3.11 可移除）。
+- **可攜版不變**：ZIP 仍內附嵌入式 Python 3.12 作為經實戰驗證的出貨基準。
+
+---
+
 ## [v3.0.1] - 2026-07-08 (True Portable Release, BUILD-3010-STABLE)
 ### 真可攜版：解壓即用 ZIP 打包系統
 - **`release_win.ps1` 全面改寫**：從「複製現有 .runtime」改為**自建完整可攜環境**——在 `dist/` staging 內下載嵌入式 Python 3.12、安裝全部依賴（Full 版含 CUDA）、隨附 medium 模型（`bundled_models/`）、放入 Starter EXE（無現成檔會用內建 csc 現場編譯）、生成「可攜版說明.txt」、`tar.exe`（ZIP64）壓縮。版本號自動從 paths.py 讀取。`-Lite`（無 CUDA 無模型）與 `-SkipZip` 參數。
